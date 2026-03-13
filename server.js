@@ -31,9 +31,25 @@ https.createServer(options, (req, res) => {
 	}
 
 	// Custom /dog route
+	// NOTE: add "/proxy?url=" to an url we want to retrieve from an external site
 	if (url === '/dog') {
 		res.writeHead(200, { 'Content-Type': 'text/html' });
-		res.end('<img src="https://i.insider.com/5df126b679d7570ad2044f3e?width=1100&format=jpeg&auto=webp">');
+		res.end('<img src="/proxy?url=https://www.wolispace.com/html/documents/pictures/comparing%20the%20old%20and%20new%20cameras.jpg">');
+		return;
+	}
+
+	// Proxy route for cross-origin files
+	if (url === '/proxy') {
+		let target = new URL(req.url, 'https://localhost').searchParams.get('url');
+		if (!target) { res.writeHead(400); res.end(); return; }
+		let mod = target.startsWith('https') ? https : http;
+		mod.get(target, (proxyRes) => {
+			res.writeHead(200, {
+				'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
+				'Cross-Origin-Resource-Policy': 'cross-origin'
+			});
+			proxyRes.pipe(res);
+		}).on('error', () => { res.writeHead(502); res.end(); });
 		return;
 	}
 
