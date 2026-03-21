@@ -40,12 +40,6 @@ function init() {
     return Math.floor(Math.random() * max);
     }
 
-    const CAMERA_X_MIN = 0;
-    const CAMERA_Y_MIN = 1;
-    const CAMERA_X_MAX = 2;
-    const CAMERA_Y_MAX = 3;
-    const MOUSE_X      = 4;
-    const MOUSE_Y      = 5;
     const numBoundingCoordinates = 6;
     const boundingCoordinatesSab   = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * numBoundingCoordinates);
     // using signed int 32 so you can navigate beyond the boundaries of the map

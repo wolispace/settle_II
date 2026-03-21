@@ -1,3 +1,4 @@
+importScripts('constants.js');
 
 self.onmessage = e => {
     const { gameCanvasOffscreen, boundingCoordinatesSab, scale, widthVal, heightVal } = e.data;
@@ -13,7 +14,7 @@ self.onmessage = e => {
     // console.log(widthVal);
     // console.log(width);
 
-    const hexRadius = 20;
+    const hexRadius = 10;
 
     
     // gameCanvasOffscreenContext.stroke();
@@ -34,13 +35,13 @@ self.onmessage = e => {
         // console.log(Atomics.load(boundingCoordinatesArray, 0));
         // console.log(Atomics.load(boundingCoordinatesArray, 1));
         ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-        const leftLimit = Atomics.load(boundingCoordinatesArray, 0);
-        const topLimit = Atomics.load(boundingCoordinatesArray, 1);
-        const rightLimit = Atomics.load(boundingCoordinatesArray, 2);
-        const bottomLimit = Atomics.load(boundingCoordinatesArray, 3);
+        const leftLimit = Atomics.load(boundingCoordinatesArray, CAMERA_X_MIN);
+        const topLimit = Atomics.load(boundingCoordinatesArray, CAMERA_Y_MIN);
+        const rightLimit = Atomics.load(boundingCoordinatesArray, CAMERA_X_MAX);
+        const bottomLimit = Atomics.load(boundingCoordinatesArray, CAMERA_Y_MAX);
 
-        const mouseX = Atomics.load(boundingCoordinatesArray, 4);
-        const mouseY = Atomics.load(boundingCoordinatesArray, 5);
+        const mouseX = Atomics.load(boundingCoordinatesArray, MOUSE_X);
+        const mouseY = Atomics.load(boundingCoordinatesArray, MOUSE_Y);
         
         for (let gridIdx = 0; gridIdx < gridArray.length; gridIdx++) {
             
