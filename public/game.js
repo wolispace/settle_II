@@ -40,6 +40,13 @@ function init() {
     return Math.floor(Math.random() * max);
     }
 
+    const numBoundingCoordinates = 4;
+    const boundingCoordinatesSab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numBoundingCoordinates);
+    // using signed int 32 so you can navigate beyond the boundaries of the map
+    const boundingCoordinatesArray   = new Int32Array(boundingCoordinatesSab); 
+    boundingCoordinatesArray[2] = window.innerWidth;
+    boundingCoordinatesArray[3] = window.innerHeight;
+
     const numElements = 1_000_000;
     const arrayOfThings1Sab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numElements);
     const arrayOfThings2Sab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numElements);
@@ -68,13 +75,30 @@ function init() {
 
     renderThread.postMessage({
         gameCanvasOffscreen,
+        boundingCoordinatesSab,
         scale,
         widthVal  : window.innerWidth,
         heightVal : window.innerHeight,
     }, [gameCanvasOffscreen]);
 
 
-
+    const scrollSpeed = 5;
+    document.addEventListener('keydown', (e)=>{
+        if (e.key == "ArrowDown") {
+            Atomics.add(boundingCoordinatesArray, 1, scrollSpeed)
+            Atomics.add(boundingCoordinatesArray, 3, scrollSpeed)           
+        } else if (e.key == "ArrowUp") {
+            Atomics.sub(boundingCoordinatesArray, 1, scrollSpeed)
+            Atomics.sub(boundingCoordinatesArray, 3, scrollSpeed)
+        } else if (e.key == "ArrowLeft") {
+            Atomics.sub(boundingCoordinatesArray, 0, scrollSpeed)
+            Atomics.sub(boundingCoordinatesArray, 2, scrollSpeed)
+        } else if (e.key == "ArrowRight") {
+            Atomics.add(boundingCoordinatesArray, 0, scrollSpeed)
+            Atomics.add(boundingCoordinatesArray, 2, scrollSpeed)
+        }
+        // console.log(boundingCoordinatesArray)
+    })
 
     // const startTime = performance.now();
 
