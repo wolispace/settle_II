@@ -13,7 +13,7 @@ self.onmessage = e => {
     // console.log(widthVal);
     // console.log(width);
 
-    const hexRadius = 10;
+    const hexRadius = 20;
 
     
     // gameCanvasOffscreenContext.stroke();
@@ -38,6 +38,9 @@ self.onmessage = e => {
         const topLimit = Atomics.load(boundingCoordinatesArray, 1);
         const rightLimit = Atomics.load(boundingCoordinatesArray, 2);
         const bottomLimit = Atomics.load(boundingCoordinatesArray, 3);
+
+        const mouseX = Atomics.load(boundingCoordinatesArray, 4);
+        const mouseY = Atomics.load(boundingCoordinatesArray, 5);
         
         for (let gridIdx = 0; gridIdx < gridArray.length; gridIdx++) {
             
@@ -49,6 +52,7 @@ self.onmessage = e => {
                 && centerX < rightLimit 
                 && centerY > topLimit
                 && centerY < bottomLimit) {
+
                 ctx.beginPath();
                 ctx.arc(
                     centerX - leftLimit, 
@@ -58,6 +62,15 @@ self.onmessage = e => {
                     2 * Math.PI);
                 ctx.fillStyle = `rgb(${gridArray[gridIdx]},${gridArray[gridIdx]},${gridArray[gridIdx]})`;
                 ctx.fill();
+
+                if (mouseX + leftLimit >= centerX - hexRadius 
+                    && mouseY + topLimit > centerY - hexRadius
+                    && mouseX + leftLimit < centerX + hexRadius 
+                    && mouseY + topLimit < centerY + hexRadius
+                ) {
+                    ctx.strokeStyle = 'red';
+                    ctx.stroke();
+                }
             }
         }
         requestAnimationFrame(step);

@@ -40,12 +40,18 @@ function init() {
     return Math.floor(Math.random() * max);
     }
 
-    const numBoundingCoordinates = 4;
-    const boundingCoordinatesSab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numBoundingCoordinates);
+    const CAMERA_X_MIN = 0;
+    const CAMERA_Y_MIN = 1;
+    const CAMERA_X_MAX = 2;
+    const CAMERA_Y_MAX = 3;
+    const MOUSE_X      = 4;
+    const MOUSE_Y      = 5;
+    const numBoundingCoordinates = 6;
+    const boundingCoordinatesSab   = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * numBoundingCoordinates);
     // using signed int 32 so you can navigate beyond the boundaries of the map
     const boundingCoordinatesArray   = new Int32Array(boundingCoordinatesSab); 
-    boundingCoordinatesArray[2] = window.innerWidth;
-    boundingCoordinatesArray[3] = window.innerHeight;
+    boundingCoordinatesArray[CAMERA_X_MAX] = window.innerWidth;
+    boundingCoordinatesArray[CAMERA_Y_MAX] = window.innerHeight;
 
     const numElements = 1_000_000;
     const arrayOfThings1Sab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numElements);
@@ -85,19 +91,24 @@ function init() {
     const scrollSpeed = 5;
     document.addEventListener('keydown', (e)=>{
         if (e.key == "ArrowDown") {
-            Atomics.add(boundingCoordinatesArray, 1, scrollSpeed)
-            Atomics.add(boundingCoordinatesArray, 3, scrollSpeed)           
+            Atomics.add(boundingCoordinatesArray, CAMERA_Y_MIN, scrollSpeed)
+            Atomics.add(boundingCoordinatesArray, CAMERA_Y_MAX, scrollSpeed)           
         } else if (e.key == "ArrowUp") {
-            Atomics.sub(boundingCoordinatesArray, 1, scrollSpeed)
-            Atomics.sub(boundingCoordinatesArray, 3, scrollSpeed)
+            Atomics.sub(boundingCoordinatesArray, CAMERA_Y_MIN, scrollSpeed)
+            Atomics.sub(boundingCoordinatesArray, CAMERA_Y_MAX, scrollSpeed)
         } else if (e.key == "ArrowLeft") {
-            Atomics.sub(boundingCoordinatesArray, 0, scrollSpeed)
-            Atomics.sub(boundingCoordinatesArray, 2, scrollSpeed)
+            Atomics.sub(boundingCoordinatesArray, CAMERA_X_MIN, scrollSpeed)
+            Atomics.sub(boundingCoordinatesArray, CAMERA_X_MAX, scrollSpeed)
         } else if (e.key == "ArrowRight") {
-            Atomics.add(boundingCoordinatesArray, 0, scrollSpeed)
-            Atomics.add(boundingCoordinatesArray, 2, scrollSpeed)
+            Atomics.add(boundingCoordinatesArray, CAMERA_X_MIN, scrollSpeed)
+            Atomics.add(boundingCoordinatesArray, CAMERA_X_MAX, scrollSpeed)
         }
         // console.log(boundingCoordinatesArray)
+    })
+
+    document.addEventListener('mousemove', (e)=>{
+        Atomics.store(boundingCoordinatesArray, MOUSE_X, e.clientX);
+        Atomics.store(boundingCoordinatesArray, MOUSE_Y, e.clientY);
     })
 
     // const startTime = performance.now();
