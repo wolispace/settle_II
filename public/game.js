@@ -1,4 +1,14 @@
-
+import { 
+    CAMERA_X_MIN, 
+    CAMERA_Y_MIN, 
+    CAMERA_X_MAX, 
+    CAMERA_Y_MAX, 
+    MOUSE_X, 
+    MOUSE_Y, 
+    HEX_RADIUS,
+    MAX_MOVABLES
+} from './constants.js';
+import { gridCoordsFromLocalMouse } from './helpers.js';
 
 // Set actual size in memory (scaled to account for extra pixel density).
 const scale = window.devicePixelRatio; // Change to 1 on retina screens to see blurry canvas.
@@ -33,8 +43,8 @@ function init() {
     const canvasBoundingBbox  = gameCanvas.getBoundingClientRect();
     const gameCanvasOffscreen = gameCanvas.transferControlToOffscreen();
 
-    const renderThread = new Worker('renderThread.js');
-    const logicThread = new Worker('gameLogic.js');
+    const renderThread = new Worker('renderThread.js', { type: 'module' });
+    const tickThread = new Worker('tick.js', { type: 'module' });
 
     function getRandomInt(max) {
     return Math.floor(Math.random() * max);
@@ -47,35 +57,19 @@ function init() {
     boundingCoordinatesArray[CAMERA_X_MAX] = window.innerWidth;
     boundingCoordinatesArray[CAMERA_Y_MAX] = window.innerHeight;
 
-    const numElements = 1_000_000;
-    const arrayOfThings1Sab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numElements);
-    const arrayOfThings2Sab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numElements);
-    const resultArraySab   = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * numElements);
-    const arrayOfThings1   = new Uint32Array(arrayOfThings1Sab); 
-    const arrayOfThings2   = new Uint32Array(arrayOfThings2Sab); 
-    const resultArray   = new Uint32Array(resultArraySab); 
+    
+    const movablePositionsSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAX_MOVABLES * 2);
+    const movablePositions = new Uint32Array(movablePositionsSab); 
+    movablePositions.fill(0xFFFFFFFF);
 
-    for (let i = 0; i < numElements; i++) {
-        Atomics.store(arrayOfThings1, i, getRandomInt(10_000));
-        Atomics.store(arrayOfThings2, i, getRandomInt(10_000));
-    }
-
-    // console.log(arrayOfThings1Sab);
-    // console.log(arrayOfThings1);
-    // console.log(arrayOfThings2);
-    // console.log(resultArray);
-
-    // console.log(logicThread);
-    logicThread.postMessage({
-        numElements,
-        arrayOfThings1Sab,
-        arrayOfThings2Sab,
-        resultArraySab
+    tickThread.postMessage({
+        movablePositionsSab
     });
 
     renderThread.postMessage({
         gameCanvasOffscreen,
         boundingCoordinatesSab,
+        movablePositionsSab,
         scale,
         widthVal  : window.innerWidth,
         heightVal : window.innerHeight,
@@ -103,6 +97,14 @@ function init() {
     document.addEventListener('mousemove', (e)=>{
         Atomics.store(boundingCoordinatesArray, MOUSE_X, e.clientX);
         Atomics.store(boundingCoordinatesArray, MOUSE_Y, e.clientY);
+    })
+
+    document.addEventListener('click', (e)=>{
+        const leftLimit = Atomics.load(boundingCoordinatesArray, CAMERA_X_MIN);
+        const topLimit = Atomics.load(boundingCoordinatesArray, CAMERA_Y_MIN);
+
+        let [y, x] = gridCoordsFromLocalMouse(e.clientX, e.clientY, leftLimit, topLimit, HEX_RADIUS)
+        console.log(`${x}, ${y}`)
     })
 
     // const startTime = performance.now();
