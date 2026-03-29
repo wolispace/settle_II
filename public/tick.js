@@ -70,7 +70,7 @@ self.onmessage = e => {
         // atomic commands act as a memory fence around non-sequential commands (which are faster)
         Atomics.load(movablePositions, 0);
         const endTime = performance.now();
-        console.log(`Tick duration: ${endTime - startTime} ms`);
+        // console.log(`Tick duration: ${endTime - startTime} ms`);
     }
 
     tick();

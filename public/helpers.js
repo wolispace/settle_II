@@ -1,12 +1,11 @@
 export function gridCoordsFromLocalMouse(mouseX, mouseY, leftLimit, topLimit, hexRadius) {
+    const SQRT3 = 1.73205080757;
     const worldX = mouseX + leftLimit;
     const worldY = mouseY + topLimit;
 
-    const fracY = (worldY - hexRadius) / (hexRadius * 1.73205080757);
-    const fracX = (worldX - hexRadius - fracY * hexRadius) / (hexRadius * 2);
+    const frac_r = (worldY - hexRadius) / (hexRadius * 1.5);
+    const frac_q = (worldX - hexRadius - frac_r * hexRadius * SQRT3 / 2) / (hexRadius * SQRT3);
 
-    const frac_q = fracX;
-    const frac_r = fracY;
     const frac_s = -frac_q - frac_r;
 
     let x = Math.round(frac_q);
@@ -29,9 +28,10 @@ export function gridCoordsFromLocalMouse(mouseX, mouseY, leftLimit, topLimit, he
 }
 
 export function getPixelCenterFromCell(terrainCellX, terrainCellY, HEX_RADIUS) {
+    const SQRT3 = 1.73205080757;
     return [
-        terrainCellX * HEX_RADIUS * 2 + HEX_RADIUS + terrainCellY * HEX_RADIUS, 
-        terrainCellY * HEX_RADIUS * 1.73205080757 + HEX_RADIUS
+        terrainCellX * HEX_RADIUS * SQRT3 + terrainCellY * HEX_RADIUS * SQRT3 / 2 + HEX_RADIUS,
+        terrainCellY * HEX_RADIUS * 1.5 + HEX_RADIUS
     ];
 }
 
