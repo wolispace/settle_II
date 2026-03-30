@@ -6,7 +6,8 @@ import {
     MOUSE_X, 
     MOUSE_Y, 
     HEX_RADIUS,
-    MAX_MOVABLES
+    MAX_MOVABLES,
+    NUM_EXTRA_BITS
 } from './constants.js';
 import { gridCoordsFromLocalMouse, getPixelCenterFromCell, isWithinRenderRegion } from './helpers.js';
 
@@ -92,13 +93,19 @@ self.onmessage = e => {
             } 
         }
     
+        while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
+            // console.log("tick waiting for render to be ready");
+        }
+
+        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
 
         for (let i = 0; i < MAX_MOVABLES; i+=2) {
-            const movableCellX = Atomics.load(movablePositions, i);
+            
+            const movableCellX = movablePositions[i];
             if (movableCellX == 0xFFFFFFFF) {
                 break;
             }
-            const movableCellY = Atomics.load(movablePositions, i+1);
+            const movableCellY = movablePositions[i+1];
             if (movableCellY == 0xFFFFFFFF) {
                 let err = `Something is wrong, there is a movable who has a valid X coordinate but not a valid Y coordinate`;
                 console.error(err);
@@ -122,6 +129,8 @@ self.onmessage = e => {
             ctx.fillStyle = `yellow`;
             ctx.fill();
         }
+
+        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
 
         requestAnimationFrame(step);
     }

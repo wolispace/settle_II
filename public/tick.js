@@ -1,3 +1,9 @@
+import { 
+    MAX_MOVABLES,
+    NUM_EXTRA_BITS
+} from './constants.js';
+
+
 class Movable {
     path;
     index = 0;
@@ -57,6 +63,12 @@ self.onmessage = e => {
     function tick(params) {
         // console.log('---tick---')
         const startTime = performance.now();
+
+        while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
+            // console.log("tick waiting for render to be ready");
+        }
+
+        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
         for (let i = 0; i < movables.length; i++) {
             
             if (movables[i].index >= movables[i].path.length) {
@@ -68,9 +80,9 @@ self.onmessage = e => {
             movables[i].index+=2;
         }
         // atomic commands act as a memory fence around non-sequential commands (which are faster)
-        Atomics.load(movablePositions, 0);
+        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
         const endTime = performance.now();
-        // console.log(`Tick duration: ${endTime - startTime} ms`);
+        console.log(`Tick duration: ${endTime - startTime} ms`);
     }
 
     tick();

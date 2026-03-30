@@ -6,7 +6,8 @@ import {
     MOUSE_X, 
     MOUSE_Y, 
     HEX_RADIUS,
-    MAX_MOVABLES
+    MAX_MOVABLES,
+    NUM_EXTRA_BITS
 } from './constants.js';
 import { gridCoordsFromLocalMouse } from './helpers.js';
 
@@ -57,10 +58,10 @@ function init() {
     boundingCoordinatesArray[CAMERA_X_MAX] = window.innerWidth;
     boundingCoordinatesArray[CAMERA_Y_MAX] = window.innerHeight;
 
-    
-    const movablePositionsSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAX_MOVABLES * 2);
+    const movablePositionsSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * (MAX_MOVABLES * 2 + NUM_EXTRA_BITS));
     const movablePositions = new Uint32Array(movablePositionsSab); 
     movablePositions.fill(0xFFFFFFFF);
+    Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
 
     tickThread.postMessage({
         movablePositionsSab
