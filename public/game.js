@@ -11,6 +11,10 @@ import {
 } from './constants.js';
 import { gridCoordsFromLocalMouse } from './helpers.js';
 
+let pauseButton = document.querySelector('#pauseButton');
+let tempAddBuildingButton = document.querySelector('#tempAddBuildingButton');
+
+
 // Set actual size in memory (scaled to account for extra pixel density).
 const scale = window.devicePixelRatio; // Change to 1 on retina screens to see blurry canvas.
 
@@ -63,8 +67,13 @@ function init() {
     movablePositions.fill(0xFFFFFFFF);
     Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
 
+    const gameStateSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * 1);
+    const gameState = new Uint32Array(gameStateSab);
+    Atomics.store(gameState, 0, 0);
+
     tickThread.postMessage({
-        movablePositionsSab
+        movablePositionsSab,
+        gameStateSab
     });
 
     renderThread.postMessage({
@@ -95,12 +104,12 @@ function init() {
         // console.log(boundingCoordinatesArray)
     })
 
-    document.addEventListener('mousemove', (e)=>{
+    gameCanvas.addEventListener('mousemove', (e)=>{
         Atomics.store(boundingCoordinatesArray, MOUSE_X, e.clientX);
         Atomics.store(boundingCoordinatesArray, MOUSE_Y, e.clientY);
     })
 
-    document.addEventListener('click', (e)=>{
+    gameCanvas.addEventListener('click', (e)=>{
         const leftLimit = Atomics.load(boundingCoordinatesArray, CAMERA_X_MIN);
         const topLimit = Atomics.load(boundingCoordinatesArray, CAMERA_Y_MIN);
 
@@ -120,6 +129,23 @@ function init() {
     // console.log(arrayOfThings1);
     // console.log(arrayOfThings2);
     // console.log(resultArray);
+
+    pauseButton.addEventListener('click', ()=>{
+        console.log('clicked pause')
+        if (Atomics.load(gameState, 0) == 0) {
+            console.log('pausing game')
+            Atomics.store(gameState, 0, 1);
+            pauseButton.textContent = '>';
+        } else {
+            console.log('unpausing game')
+            Atomics.store(gameState, 0, 0);
+            pauseButton.textContent = '||';
+        }
+    })
+
+    tempAddBuildingButton.addEventListener('click', ()=>{
+        console.log('clicked tempAddBuildingButton')
+    })
 }
 
 document.addEventListener("DOMContentLoaded", init);

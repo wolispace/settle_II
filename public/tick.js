@@ -26,9 +26,10 @@ class Task {
 
 
 self.onmessage = e => {
-    const { movablePositionsSab } = e.data;
+    const { movablePositionsSab, gameStateSab } = e.data;
 
     const movablePositions   = new Uint32Array(movablePositionsSab); 
+    const gameState = new Uint32Array(gameStateSab);
 // NORTH_EAST	0	−1
 // EAST	    +1	0
 // SOUTH_EAST	+1	+1
@@ -97,6 +98,11 @@ self.onmessage = e => {
     function tick(params) {
         // console.log('---tick---')
         const startTime = performance.now();
+
+        if (Atomics.load(gameState, 0) == 1) {
+            console.log('game is paused, skipping tick')
+            return;
+        }
 
         let currentTickTasks = tasks.shift();
         
