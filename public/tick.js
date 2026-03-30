@@ -14,6 +14,16 @@ class Movable {
     }
 }
 
+class Task {
+    todo;
+    rescheduleFrequency;
+    
+    constructor(todo, rescheduleFrequency) {
+        this.todo = todo;
+        this.rescheduleFrequency = rescheduleFrequency;
+    }
+}
+
 
 self.onmessage = e => {
     const { movablePositionsSab } = e.data;
@@ -29,6 +39,30 @@ self.onmessage = e => {
     // let dummyVillager = new Movable([5,3,5,2,4,2,3,2,2,2,2,1]);
     // let dummyVillager2 = new Movable([10,1,9,1,8,1]);
     // let movables = [dummyVillager2, dummyVillager];
+
+    const moveAllMovablesTask = new Task((i)=>{
+        console.log(`it's time to move all movables`)
+
+        while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
+            // console.log("tick waiting for render to be ready");
+        }
+
+        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
+        for (let i = 0; i < movables.length; i++) {
+            
+            if (movables[i].index >= movables[i].path.length) {
+                continue;
+            } 
+
+            movablePositions[i*2] = movables[i].path[movables[i].index];
+            movablePositions[i*2+1] = movables[i].path[movables[i].index + 1];
+            movables[i].index+=2;
+        }
+        // atomic commands act as a memory fence around non-sequential commands (which are faster)
+        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
+    }, 3);
+
+    let tasks = [[moveAllMovablesTask]];
 
     let movables = [];
     let numPeople = 20_000;
@@ -64,29 +98,24 @@ self.onmessage = e => {
         // console.log('---tick---')
         const startTime = performance.now();
 
-        while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
-            // console.log("tick waiting for render to be ready");
+        let currentTickTasks = tasks.shift();
+        
+        for (let i = 0; i < currentTickTasks?.length; i++) {
+            currentTickTasks[i].todo();
+            if (tasks[currentTickTasks[i].rescheduleFrequency] == undefined) {
+                tasks[currentTickTasks[i].rescheduleFrequency] = [];
+            }
+            tasks[currentTickTasks[i].rescheduleFrequency].push(currentTickTasks[i]);
         }
 
-        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
-        for (let i = 0; i < movables.length; i++) {
-            
-            if (movables[i].index >= movables[i].path.length) {
-                continue;
-            } 
-
-            movablePositions[i*2] = movables[i].path[movables[i].index];
-            movablePositions[i*2+1] = movables[i].path[movables[i].index + 1];
-            movables[i].index+=2;
-        }
-        // atomic commands act as a memory fence around non-sequential commands (which are faster)
-        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
+        
+        
         const endTime = performance.now();
-        console.log(`Tick duration: ${endTime - startTime} ms`);
+        // console.log(`Tick duration: ${endTime - startTime} ms`);
     }
 
     tick();
-    let refVar = setInterval(tick, 500);
+    let refVar = setInterval(tick, 250);
 
 
     // 
