@@ -9,3 +9,5 @@ export const HEX_RADIUS = 10;
 export const MAX_MOVABLES = 20_000;
 
 export const NUM_EXTRA_BITS = 1; // at the moment we're just storing an extra bit for whether the movablePositions is currently locked or not
+export const MAX_SCHEDULE_DURATION_MS = 32_000;
+export const TICK_PERIOD_MS = 250;

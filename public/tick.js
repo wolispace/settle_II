@@ -1,6 +1,8 @@
 import { 
     MAX_MOVABLES,
-    NUM_EXTRA_BITS
+    NUM_EXTRA_BITS,
+    MAX_SCHEDULE_DURATION_MS,
+    TICK_PERIOD_MS
 } from './constants.js';
 
 
@@ -16,11 +18,14 @@ class Movable {
 
 class Task {
     todo;
-    rescheduleFrequency;
+    rescheduleDurationInTicks;
     
-    constructor(todo, rescheduleFrequency) {
+    constructor(todo, rescheduleDurationInMs) {
         this.todo = todo;
-        this.rescheduleFrequency = rescheduleFrequency;
+        if (rescheduleDurationInMs >= MAX_SCHEDULE_DURATION_MS) {
+            throw new Error(`Can't add a rescheduleDurationInMs (${rescheduleDurationInMs}) longer than ${MAX_SCHEDULE_DURATION_MS}`);   
+        }
+        this.rescheduleDurationInTicks = rescheduleDurationInMs/TICK_PERIOD_MS;
     }
 }
 
@@ -61,9 +66,12 @@ self.onmessage = e => {
         }
         // atomic commands act as a memory fence around non-sequential commands (which are faster)
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
-    }, 3);
+    }, 750);
 
-    let tasks = [[moveAllMovablesTask]];
+    const totalTicks = MAX_SCHEDULE_DURATION_MS/TICK_PERIOD_MS;
+    const tasks = new Array(totalTicks);
+    tasks[0] = [moveAllMovablesTask];
+    let taskPointer = 0;
 
     let movables = [];
     let numPeople = 20_000;
@@ -104,16 +112,25 @@ self.onmessage = e => {
             return;
         }
 
-        let currentTickTasks = tasks.shift();
+        let currentTickTasks = tasks[taskPointer];
         
         for (let i = 0; i < currentTickTasks?.length; i++) {
             currentTickTasks[i].todo();
-            if (tasks[currentTickTasks[i].rescheduleFrequency] == undefined) {
-                tasks[currentTickTasks[i].rescheduleFrequency] = [];
+
+            if (currentTickTasks[i].rescheduleDurationInTicks) {
+                const nextPointerPosition = (taskPointer + currentTickTasks[i].rescheduleDurationInTicks) % totalTicks;
+                if (tasks[nextPointerPosition] == undefined) {
+                    tasks[nextPointerPosition] = [];
+                }
+                tasks[nextPointerPosition].push(currentTickTasks[i]);
+                console.log({nextPointerPosition});
+                console.log({totalTicks});
+                // console.log(JSON.parse(JSON.stringify(tasks)));
             }
-            tasks[currentTickTasks[i].rescheduleFrequency].push(currentTickTasks[i]);
         }
 
+        tasks[taskPointer] = [];
+        taskPointer = (taskPointer+1) % totalTicks;
         
         
         const endTime = performance.now();
@@ -121,7 +138,7 @@ self.onmessage = e => {
     }
 
     tick();
-    let refVar = setInterval(tick, 250);
+    let refVar = setInterval(tick, TICK_PERIOD_MS);
 
 
     // 
