@@ -47,7 +47,7 @@ self.onmessage = e => {
     // let movables = [dummyVillager2, dummyVillager];
 
     const moveAllMovablesTask = new Task((i)=>{
-        console.log(`it's time to move all movables`)
+        // console.log(`it's time to move all movables`)
 
         while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
             // console.log("tick waiting for render to be ready");
@@ -123,9 +123,6 @@ self.onmessage = e => {
                     tasks[nextPointerPosition] = [];
                 }
                 tasks[nextPointerPosition].push(currentTickTasks[i]);
-                console.log({nextPointerPosition});
-                console.log({totalTicks});
-                // console.log(JSON.parse(JSON.stringify(tasks)));
             }
         }
 

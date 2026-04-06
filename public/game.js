@@ -1,18 +1,14 @@
 import { 
-    CAMERA_X_MIN, 
-    CAMERA_Y_MIN, 
-    CAMERA_X_MAX, 
-    CAMERA_Y_MAX, 
-    MOUSE_X, 
-    MOUSE_Y, 
+    PLAYER_STATE_ARRAY_INDEXES, 
     HEX_RADIUS,
     MAX_MOVABLES,
     NUM_EXTRA_BITS
 } from './constants.js';
 import { gridCoordsFromLocalMouse } from './helpers.js';
 
-let pauseButton = document.querySelector('#pauseButton');
-let tempAddBuildingButton = document.querySelector('#tempAddBuildingButton');
+const pauseButton = document.querySelector('#pauseButton');
+const tempAddWoodcutterButton = document.querySelector('#tempAddWoodcutterButton');
+const tempAddSawmillButton = document.querySelector('#tempAddSawmillButton');
 
 
 // Set actual size in memory (scaled to account for extra pixel density).
@@ -55,12 +51,11 @@ function init() {
     return Math.floor(Math.random() * max);
     }
 
-    const numBoundingCoordinates = 6;
-    const boundingCoordinatesSab   = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * numBoundingCoordinates);
+    const playerStateSab   = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * Math.max(...Object.values(PLAYER_STATE_ARRAY_INDEXES)));
     // using signed int 32 so you can navigate beyond the boundaries of the map
-    const boundingCoordinatesArray   = new Int32Array(boundingCoordinatesSab); 
-    boundingCoordinatesArray[CAMERA_X_MAX] = window.innerWidth;
-    boundingCoordinatesArray[CAMERA_Y_MAX] = window.innerHeight;
+    const playStateArray   = new Int32Array(playerStateSab); 
+    playStateArray[PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MAX] = window.innerWidth;
+    playStateArray[PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MAX] = window.innerHeight;
 
     const movablePositionsSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * (MAX_MOVABLES * 2 + NUM_EXTRA_BITS));
     const movablePositions = new Uint32Array(movablePositionsSab); 
@@ -78,7 +73,7 @@ function init() {
 
     renderThread.postMessage({
         gameCanvasOffscreen,
-        boundingCoordinatesSab,
+        playerStateSab,
         movablePositionsSab,
         scale,
         widthVal  : window.innerWidth,
@@ -89,29 +84,29 @@ function init() {
     const scrollSpeed = 5;
     document.addEventListener('keydown', (e)=>{
         if (e.key == "ArrowDown") {
-            Atomics.add(boundingCoordinatesArray, CAMERA_Y_MIN, scrollSpeed)
-            Atomics.add(boundingCoordinatesArray, CAMERA_Y_MAX, scrollSpeed)           
+            Atomics.add(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MIN, scrollSpeed)
+            Atomics.add(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MAX, scrollSpeed)           
         } else if (e.key == "ArrowUp") {
-            Atomics.sub(boundingCoordinatesArray, CAMERA_Y_MIN, scrollSpeed)
-            Atomics.sub(boundingCoordinatesArray, CAMERA_Y_MAX, scrollSpeed)
+            Atomics.sub(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MIN, scrollSpeed)
+            Atomics.sub(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MAX, scrollSpeed)
         } else if (e.key == "ArrowLeft") {
-            Atomics.sub(boundingCoordinatesArray, CAMERA_X_MIN, scrollSpeed)
-            Atomics.sub(boundingCoordinatesArray, CAMERA_X_MAX, scrollSpeed)
+            Atomics.sub(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MIN, scrollSpeed)
+            Atomics.sub(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MAX, scrollSpeed)
         } else if (e.key == "ArrowRight") {
-            Atomics.add(boundingCoordinatesArray, CAMERA_X_MIN, scrollSpeed)
-            Atomics.add(boundingCoordinatesArray, CAMERA_X_MAX, scrollSpeed)
+            Atomics.add(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MIN, scrollSpeed)
+            Atomics.add(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MAX, scrollSpeed)
         }
-        // console.log(boundingCoordinatesArray)
+        // console.log(playStateArray)
     })
 
     gameCanvas.addEventListener('mousemove', (e)=>{
-        Atomics.store(boundingCoordinatesArray, MOUSE_X, e.clientX);
-        Atomics.store(boundingCoordinatesArray, MOUSE_Y, e.clientY);
+        Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_X, e.clientX);
+        Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_Y, e.clientY);
     })
 
     gameCanvas.addEventListener('click', (e)=>{
-        const leftLimit = Atomics.load(boundingCoordinatesArray, CAMERA_X_MIN);
-        const topLimit = Atomics.load(boundingCoordinatesArray, CAMERA_Y_MIN);
+        const leftLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MIN);
+        const topLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MIN);
 
         let [y, x] = gridCoordsFromLocalMouse(e.clientX, e.clientY, leftLimit, topLimit, HEX_RADIUS)
         console.log(`${x}, ${y}`)
@@ -143,8 +138,12 @@ function init() {
         }
     })
 
-    tempAddBuildingButton.addEventListener('click', ()=>{
-        console.log('clicked tempAddBuildingButton')
+    tempAddWoodcutterButton.addEventListener('click', ()=>{
+        console.log('clicked tempAddWoodcutterButton')
+    })
+
+    tempAddSawmillButton.addEventListener('click', ()=>{
+        console.log(`clicked tempAddSawmillButton`);
     })
 }
 

@@ -1,10 +1,5 @@
 import { 
-    CAMERA_X_MIN, 
-    CAMERA_Y_MIN, 
-    CAMERA_X_MAX, 
-    CAMERA_Y_MAX, 
-    MOUSE_X, 
-    MOUSE_Y, 
+    PLAYER_STATE_ARRAY_INDEXES, 
     HEX_RADIUS,
     MAX_MOVABLES,
     NUM_EXTRA_BITS
@@ -12,9 +7,9 @@ import {
 import { gridCoordsFromLocalMouse, getPixelCenterFromCell, isWithinRenderRegion } from './helpers.js';
 
 self.onmessage = e => {
-    const { gameCanvasOffscreen, boundingCoordinatesSab, movablePositionsSab, scale, widthVal, heightVal } = e.data;
+    const { gameCanvasOffscreen, playerStateSab, movablePositionsSab, scale, widthVal, heightVal } = e.data;
 
-    const boundingCoordinatesArray = new Int32Array(boundingCoordinatesSab); 
+    const playStateArray = new Int32Array(playerStateSab); 
     const movablePositions = new Uint32Array(movablePositionsSab); 
 
     const ctx = gameCanvasOffscreen.getContext('2d');
@@ -50,16 +45,16 @@ self.onmessage = e => {
     function step(timestamp) {
         // console.log(`---${loopcount}---`)
         // loopcount++
-        // console.log(Atomics.load(boundingCoordinatesArray, 0));
-        // console.log(Atomics.load(boundingCoordinatesArray, 1));
+        // console.log(Atomics.load(playStateArray, 0));
+        // console.log(Atomics.load(playStateArray, 1));
         ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-        const leftLimit = Atomics.load(boundingCoordinatesArray, CAMERA_X_MIN);
-        const topLimit = Atomics.load(boundingCoordinatesArray, CAMERA_Y_MIN);
-        const rightLimit = Atomics.load(boundingCoordinatesArray, CAMERA_X_MAX);
-        const bottomLimit = Atomics.load(boundingCoordinatesArray, CAMERA_Y_MAX);
+        const leftLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MIN);
+        const topLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MIN);
+        const rightLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MAX);
+        const bottomLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MAX);
 
-        const mouseX = Atomics.load(boundingCoordinatesArray, MOUSE_X);
-        const mouseY = Atomics.load(boundingCoordinatesArray, MOUSE_Y);
+        const mouseX = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_X);
+        const mouseY = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_Y);
 
         let [y, x] = gridCoordsFromLocalMouse(mouseX, mouseY, leftLimit, topLimit, HEX_RADIUS)
         

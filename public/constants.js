@@ -1,9 +1,14 @@
-export const CAMERA_X_MIN = 0;
-export const CAMERA_Y_MIN = 1;
-export const CAMERA_X_MAX = 2;
-export const CAMERA_Y_MAX = 3;
-export const MOUSE_X      = 4;
-export const MOUSE_Y      = 5;
+// playStateArray indexes
+export const PLAYER_STATE_ARRAY_INDEXES = {
+    CAMERA_X_MIN:        0,
+    CAMERA_Y_MIN:        1,
+    CAMERA_X_MAX:        2,
+    CAMERA_Y_MAX:        3,
+    MOUSE_X:             4,
+    MOUSE_Y:             5,
+    SELECTED_HOUSE_TYPE: 6
+}
+
 
 export const HEX_RADIUS = 10;
 export const MAX_MOVABLES = 20_000;
