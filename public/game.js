@@ -51,11 +51,12 @@ function init() {
     return Math.floor(Math.random() * max);
     }
 
-    const playerStateSab   = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * Math.max(...Object.values(PLAYER_STATE_ARRAY_INDEXES)));
+    const playerStateSab   = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * (Math.max(...Object.values(PLAYER_STATE_ARRAY_INDEXES)) + 1));
     // using signed int 32 so you can navigate beyond the boundaries of the map
     const playStateArray   = new Int32Array(playerStateSab); 
     playStateArray[PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MAX] = window.innerWidth;
     playStateArray[PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MAX] = window.innerHeight;
+    playStateArray[PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE] = -1;
 
     const movablePositionsSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * (MAX_MOVABLES * 2 + NUM_EXTRA_BITS));
     const movablePositions = new Uint32Array(movablePositionsSab); 
@@ -110,6 +111,7 @@ function init() {
 
         let [y, x] = gridCoordsFromLocalMouse(e.clientX, e.clientY, leftLimit, topLimit, HEX_RADIUS)
         console.log(`${x}, ${y}`)
+        Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, -1);
     })
 
     // const startTime = performance.now();
@@ -139,11 +141,13 @@ function init() {
     })
 
     tempAddWoodcutterButton.addEventListener('click', ()=>{
-        console.log('clicked tempAddWoodcutterButton')
+        console.log('clicked tempAddWoodcutterButton');
+        Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, 0);
     })
 
     tempAddSawmillButton.addEventListener('click', ()=>{
         console.log(`clicked tempAddSawmillButton`);
+        Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, 1);
     })
 }
 

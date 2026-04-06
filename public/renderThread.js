@@ -5,6 +5,7 @@ import {
     NUM_EXTRA_BITS
 } from './constants.js';
 import { gridCoordsFromLocalMouse, getPixelCenterFromCell, isWithinRenderRegion } from './helpers.js';
+import { buildings } from './buildings.js';
 
 self.onmessage = e => {
     const { gameCanvasOffscreen, playerStateSab, movablePositionsSab, scale, widthVal, heightVal } = e.data;
@@ -53,10 +54,20 @@ self.onmessage = e => {
         const rightLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MAX);
         const bottomLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MAX);
 
-        const mouseX = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_X);
-        const mouseY = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_Y);
+        const mouseXAsPx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_X);
+        const mouseYAsPx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_Y);
 
-        let [y, x] = gridCoordsFromLocalMouse(mouseX, mouseY, leftLimit, topLimit, HEX_RADIUS)
+        const [mouseYAsCell, mouseXAsCell] = gridCoordsFromLocalMouse(mouseXAsPx, mouseYAsPx, leftLimit, topLimit, HEX_RADIUS)
+        
+        let buildingHighlightedCells = [];
+        const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
+
+        if (currentBuildingIdx != -1) {
+            buildingHighlightedCells = buildings[currentBuildingIdx].collisionBox.map(([x, y]) => [x + mouseXAsCell, y + mouseYAsCell]);
+            // console.log(buildingHighlightedCells);
+        }
+
+        //#region - draw terrain
         
         for (let gridIdx = 0; gridIdx < gridArray.length; gridIdx++) {
             
@@ -82,18 +93,34 @@ self.onmessage = e => {
             ctx.fillStyle = `rgb(${gridArray[gridIdx]},${gridArray[gridIdx]},${gridArray[gridIdx]})`;
             ctx.fill();
 
-            if (terrainCellX === x && terrainCellY === y) {
+            if (terrainCellX === mouseXAsCell && terrainCellY === mouseYAsCell) {
                 ctx.strokeStyle = 'red';
                 ctx.stroke();
+
             } 
+            
+            // do we want to be doing this for every loop? Perhaps just do it once when the current selected mouse cell is being drawn
+            for (let k = 0; k < buildingHighlightedCells.length; k++) {
+                const currentHighlight = buildingHighlightedCells[k];
+                // console.log(currentHighlight);
+                if (terrainCellX === currentHighlight[0] && terrainCellY === currentHighlight[1]) {
+                    ctx.fillStyle = `rgb(255,255,0,0.5)`;
+                    ctx.fill();
+                }
+            }
+
+            
+            
+            
         }
+        //#endregion
     
+        //#region - draw movables
         while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
             // console.log("tick waiting for render to be ready");
         }
 
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
-
         for (let i = 0; i < MAX_MOVABLES; i+=2) {
             
             const movableCellX = movablePositions[i];
@@ -124,6 +151,7 @@ self.onmessage = e => {
             ctx.fillStyle = `yellow`;
             ctx.fill();
         }
+        //#endregion
 
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
 
