@@ -6,13 +6,7 @@ import {
     MAP_HEIGHT,
     MAP_WIDTH
 } from './constants.js';
-import { 
-    gridCoordsFromLocalMouse, 
-    getPixelCenterFromCell, 
-    isWithinRenderRegion,
-    getXYCoordinateFrom1DCoordinate,
-    convertCollisionBoxToLocalCoordinates
-} from './helpers.js';
+import helpers from './helpers.js';
 import { buildings } from './buildings.js';
 
 self.onmessage = e => {
@@ -65,13 +59,13 @@ self.onmessage = e => {
         const mouseXAsPx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_X);
         const mouseYAsPx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.MOUSE_Y);
 
-        const [mouseYAsCell, mouseXAsCell] = gridCoordsFromLocalMouse(mouseXAsPx, mouseYAsPx, leftLimit, topLimit, HEX_RADIUS)
+        const [mouseYAsCell, mouseXAsCell] = helpers.gridCoordsFromLocalMouse(mouseXAsPx, mouseYAsPx, leftLimit, topLimit, HEX_RADIUS)
         
         let buildingHighlightedCells = [];
         const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
 
         if (currentBuildingIdx != -1) {
-            buildingHighlightedCells = convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, mouseXAsCell, mouseYAsCell)
+            buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, mouseXAsCell, mouseYAsCell)
             // console.log(buildingHighlightedCells);
         }
 
@@ -79,11 +73,11 @@ self.onmessage = e => {
         
         for (let gridIdx = 0; gridIdx < terrainMapMask.length; gridIdx++) {
             
-            const terrainCell = getXYCoordinateFrom1DCoordinate(gridIdx, MAP_WIDTH);
+            const terrainCell = helpers.getXYCoordinateFrom1DCoordinate(gridIdx, MAP_WIDTH);
 
-            const [centerPixelX, centerPixelY] = getPixelCenterFromCell(terrainCell.x, terrainCell.y, HEX_RADIUS);
+            const [centerPixelX, centerPixelY] = helpers.getPixelCenterFromCell(terrainCell.x, terrainCell.y, HEX_RADIUS);
             
-            if (!isWithinRenderRegion(centerPixelX, centerPixelY, leftLimit, rightLimit, topLimit, bottomLimit)) {
+            if (!helpers.isWithinRenderRegion(centerPixelX, centerPixelY, leftLimit, rightLimit, topLimit, bottomLimit)) {
                 continue;
             }
 
@@ -150,9 +144,9 @@ self.onmessage = e => {
                 break;
             }
             
-            const [centerPixelX, centerPixelY] = getPixelCenterFromCell(movableCellX, movableCellY, HEX_RADIUS);
+            const [centerPixelX, centerPixelY] = helpers.getPixelCenterFromCell(movableCellX, movableCellY, HEX_RADIUS);
 
-            if (!isWithinRenderRegion(centerPixelX, centerPixelY, leftLimit, rightLimit, topLimit, bottomLimit)) {
+            if (!helpers.isWithinRenderRegion(centerPixelX, centerPixelY, leftLimit, rightLimit, topLimit, bottomLimit)) {
                 continue;
             }
 

@@ -5,9 +5,7 @@ import {
     TICK_PERIOD_MS,
     MAP_WIDTH
 } from './constants.js';
-import { 
-    get1DCoordinateFromXYCoordinate
-} from './helpers.js';
+import helpers from './helpers.js';
 
 class Movable {
     path;
@@ -132,7 +130,7 @@ self.onmessage = e => {
         [1,2].forEach((currentDebugUserIndex)=>{
             const currentTargetPositionAsXYCoordinate = movables[currentDebugUserIndex].targetPosition
             // console.log(currentTargetPositionAsXYCoordinate)
-            const currentTargetPositionAs1DCorrdinate = get1DCoordinateFromXYCoordinate(currentTargetPositionAsXYCoordinate[0], currentTargetPositionAsXYCoordinate[1], MAP_WIDTH)
+            const currentTargetPositionAs1DCorrdinate = helpers.get1DCoordinateFromXYCoordinate(currentTargetPositionAsXYCoordinate[0], currentTargetPositionAsXYCoordinate[1], MAP_WIDTH)
             // console.log(currentTargetPositionAs1DCorrdinate);
             const currentGameStateTargetPosition = Atomics.load(gameState, currentDebugUserIndex);
             // console.log(currentGameStateTargetPosition)

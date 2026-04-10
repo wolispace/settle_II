@@ -6,11 +6,7 @@ import {
     MAP_HEIGHT,
     MAP_WIDTH
 } from './constants.js';
-import { 
-    gridCoordsFromLocalMouse,
-    convertCollisionBoxToLocalCoordinates,
-    get1DCoordinateFromXYCoordinate
-} from './helpers.js';
+import helpers from './helpers.js';
 import { buildings } from './buildings.js';
 
 const pauseButton = document.querySelector('#pauseButton');
@@ -131,12 +127,12 @@ function init() {
         const leftLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_X_MIN);
         const topLimit = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.CAMERA_Y_MIN);
 
-        let [y, x] = gridCoordsFromLocalMouse(e.clientX, e.clientY, leftLimit, topLimit, HEX_RADIUS)
+        let [y, x] = helpers.gridCoordsFromLocalMouse(e.clientX, e.clientY, leftLimit, topLimit, HEX_RADIUS)
         console.log(`${x}, ${y}`)
         
         const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
         if (currentBuildingIdx != -1) {
-            const buildingHighlightedCells = convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, x, y)
+            const buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, x, y)
             let allCellsAreValid = true;
             for (let i = 0; i < buildingHighlightedCells.length; i++) {
                 const currentCell = buildingHighlightedCells[i];
@@ -147,7 +143,7 @@ function init() {
                     allCellsAreValid = false;
                     break;
                 }
-                const current1DCoordinate = get1DCoordinateFromXYCoordinate(buildingHighlightedCells[i][0], buildingHighlightedCells[i][1], MAP_WIDTH);
+                const current1DCoordinate = helpers.get1DCoordinateFromXYCoordinate(buildingHighlightedCells[i][0], buildingHighlightedCells[i][1], MAP_WIDTH);
                 if (Atomics.load(collisionsMapMask, current1DCoordinate) == 1) {
                     allCellsAreValid = false;
                     break;
@@ -157,7 +153,7 @@ function init() {
                 // add all cells to collision map mask
                 for (let i = 0; i < buildingHighlightedCells.length; i++) {
                     // console.log(buildingHighlightedCells[i]);
-                    const current1DCoordinate = get1DCoordinateFromXYCoordinate(buildingHighlightedCells[i][0], buildingHighlightedCells[i][1], MAP_WIDTH);
+                    const current1DCoordinate = helpers.get1DCoordinateFromXYCoordinate(buildingHighlightedCells[i][0], buildingHighlightedCells[i][1], MAP_WIDTH);
                     // console.log(current1DCoordinate);
                     Atomics.store(collisionsMapMask, current1DCoordinate, 1);
                 }
@@ -167,7 +163,7 @@ function init() {
             Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, -1);
         } else {
             // for debugging purposes only, to be removed later
-            Atomics.store(gameState, window.me, get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH));
+            Atomics.store(gameState, window.me, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH));
             console.log(gameState);
         }
 
