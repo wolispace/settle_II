@@ -37,6 +37,9 @@ function fullScreenCanvas(elem) {
 
 function init() { 
 
+    // for testing only, to be removed, allow users to set their index
+    window.me = 1;
+
     const gameCanvas = document.querySelector('#gameCanvas');
 
     console.log(gameCanvas);
@@ -70,9 +73,14 @@ function init() {
     movablePositions.fill(0xFFFFFFFF);
     Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
 
-    const gameStateSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * 1);
+    // 0: paused
+    // 1: Wallace position
+    // 2: Josh position
+    const gameStateSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * 3);
     const gameState = new Uint32Array(gameStateSab);
     Atomics.store(gameState, 0, 0);
+    Atomics.store(gameState, 1, 21);
+    Atomics.store(gameState, 2, 41);
 
     const terrainMapMaskSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
     const collisionsMapMaskSab = new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
@@ -157,6 +165,10 @@ function init() {
             }
 
             Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, -1);
+        } else {
+            // for debugging purposes only, to be removed later
+            Atomics.store(gameState, window.me, get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH));
+            console.log(gameState);
         }
 
     })

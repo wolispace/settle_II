@@ -2,9 +2,12 @@ import {
     MAX_MOVABLES,
     NUM_EXTRA_BITS,
     MAX_SCHEDULE_DURATION_MS,
-    TICK_PERIOD_MS
+    TICK_PERIOD_MS,
+    MAP_WIDTH
 } from './constants.js';
-
+import { 
+    get1DCoordinateFromXYCoordinate
+} from './helpers.js';
 
 class Movable {
     path;
@@ -13,6 +16,11 @@ class Movable {
     constructor(path) {
         this.path = path;
         // this.path = new Int32Array(new ArrayBuffer(6 * 2));
+    }
+
+    get targetPosition() {
+        // this feels messy, could be updated to be more dynamic in case the path array structure changes
+        return [this.path[this.path.length - 2] , this.path[this.path.length - 1]];
     }
 }
 
@@ -73,44 +81,67 @@ self.onmessage = e => {
     tasks[0] = [moveAllMovablesTask];
     let taskPointer = 0;
 
-    let movables = [];
-    let numPeople = 20_000;
-    let testRange = 1000;
-    let pathLength = 100;
-    for (let i = 0; i < numPeople; i++) {
-        let path = [Math.floor(Math.random()*testRange), Math.floor(Math.random()*testRange)]
-        // console.log("========")
-        // console.log(`Starting at: ${path[0], path[1]}`)
-        for (let i = 0; i < pathLength; i++) {
-            // console.log(i);
-            let offset = Math.random();
-            if (offset > 0.5) {
-                offset = 1;
-            } else {
-                offset = -1;
-            }
-            if (Math.random() > 0.5) {
-                // console.log(`setting ${i*2+2} = ${path[i*2]}`)
+    let movables = [new Movable([0,0])];
+    movables.push(new Movable([5,1, 4,1, 3,1, 2,1, 1,1]));
+    movables.push(new Movable([5,2, 4,2, 3,2, 2,2, 1,2]));
+   
 
-                path[i*2+2] = Math.max(path[i*2] + offset, 0);
-                path[i*2+2+1] = path[i*2+1]
-            } else {
-                path[i*2+2] = path[i*2] 
-                path[i*2+2+1] = Math.max(path[i*2+1] + offset, 0);
-            }
-        }
-        movables.push(new Movable(path));
-    }
+    //#region - add 20_000 people and have them wander randomly
+    
+    // let numPeople = 20_000;
+    // let testRange = 1000;
+    // let pathLength = 100;
+    // for (let i = 0; i < numPeople; i++) {
+    //     let path = [Math.floor(Math.random()*testRange), Math.floor(Math.random()*testRange)]
+    //     // console.log("========")
+    //     // console.log(`Starting at: ${path[0], path[1]}`)
+    //     for (let i = 0; i < pathLength; i++) {
+    //         // console.log(i);
+    //         let offset = Math.random();
+    //         if (offset > 0.5) {
+    //             offset = 1;
+    //         } else {
+    //             offset = -1;
+    //         }
+    //         if (Math.random() > 0.5) {
+    //             // console.log(`setting ${i*2+2} = ${path[i*2]}`)
+
+    //             path[i*2+2] = Math.max(path[i*2] + offset, 0);
+    //             path[i*2+2+1] = path[i*2+1]
+    //         } else {
+    //             path[i*2+2] = path[i*2] 
+    //             path[i*2+2+1] = Math.max(path[i*2+1] + offset, 0);
+    //         }
+    //     }
+    //     movables.push(new Movable(path));
+    // }
     // console.log(movables);
+    //#endregion
 
     function tick(params) {
         // console.log('---tick---')
         const startTime = performance.now();
 
+        // this should be in the scheduled tasks for a future tick, not implemented immediately
         if (Atomics.load(gameState, 0) == 1) {
             console.log('game is paused, skipping tick')
             return;
         }
+
+        //#region - for debug: check if each players position is different from their target position
+        [1,2].forEach((currentDebugUserIndex)=>{
+            const currentTargetPositionAsXYCoordinate = movables[currentDebugUserIndex].targetPosition
+            // console.log(currentTargetPositionAsXYCoordinate)
+            const currentTargetPositionAs1DCorrdinate = get1DCoordinateFromXYCoordinate(currentTargetPositionAsXYCoordinate[0], currentTargetPositionAsXYCoordinate[1], MAP_WIDTH)
+            // console.log(currentTargetPositionAs1DCorrdinate);
+            const currentGameStateTargetPosition = Atomics.load(gameState, currentDebugUserIndex);
+            // console.log(currentGameStateTargetPosition)
+            // if old target position doesn't match new target position, target position has changed, and the path should be recalculated
+            if (currentTargetPositionAs1DCorrdinate != currentGameStateTargetPosition) {
+                // calculate bucketed A*
+            }
+        })
+        //#endregion
 
         let currentTickTasks = tasks[taskPointer];
         
