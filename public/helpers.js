@@ -41,3 +41,18 @@ export function isWithinRenderRegion(centerPixelX, centerPixelY, leftLimit, righ
         && centerPixelY > topLimit
         && centerPixelY < bottomLimit
 }
+
+export function getXYCoordinateFrom1DCoordinate(index, mapWidth) {
+    return { 
+        y: Math.floor(index/mapWidth),
+        x: index % mapWidth
+    } 
+}
+
+export function get1DCoordinateFromXYCoordinate(x, y, mapWidth) {
+    return y * mapWidth + x;
+}
+
+export function convertCollisionBoxToLocalCoordinates(collisionBox, targetX, targetY) {
+    return collisionBox.map(([x, y]) => [x + targetX, y + targetY]);
+}

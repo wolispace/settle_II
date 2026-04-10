@@ -10,13 +10,11 @@ import {
     gridCoordsFromLocalMouse, 
     getPixelCenterFromCell, 
     isWithinRenderRegion,
-    getXYCoordinateFrom1DCoordinate,
-    convertCollisionBoxToLocalCoordinates
-} from './helpers.js';
+    getXYCoordinateFrom1DCoordinate } from './helpers.js';
 import { buildings } from './buildings.js';
 
 self.onmessage = e => {
-    const { gameCanvasOffscreen, playerStateSab, movablePositionsSab, terrainMapMaskSab, collisionsMapMaskSab, scale, widthVal, heightVal } = e.data;
+    const { gameCanvasOffscreen, playerStateSab, movablePositionsSab, terrainMapMaskSab, scale, widthVal, heightVal } = e.data;
 
     const playStateArray = new Int32Array(playerStateSab); 
     const movablePositions = new Uint32Array(movablePositionsSab); 
@@ -38,7 +36,7 @@ self.onmessage = e => {
 
     
     const terrainMapMask = new Uint32Array(terrainMapMaskSab); 
-    const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
+    const collisionsMapMask = new UTIN
 
     for (let gridIdx = 0; gridIdx < terrainMapMask.length; gridIdx++) {
         terrainMapMask[gridIdx] = Math.random() * 255;
@@ -48,7 +46,6 @@ self.onmessage = e => {
     const dx = HEX_RADIUS * SQRT3_2; // X-offset (half of the full width)
     const dy = HEX_RADIUS * 0.5;     // Y-offset for the side points
 
-    let debug = 0;
     // let loopcount = 0;
 
     function step(timestamp) {
@@ -71,7 +68,7 @@ self.onmessage = e => {
         const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
 
         if (currentBuildingIdx != -1) {
-            buildingHighlightedCells = convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, mouseXAsCell, mouseYAsCell)
+            buildingHighlightedCells = buildings[currentBuildingIdx].collisionBox.map(([x, y]) => [x + mouseXAsCell, y + mouseYAsCell]);
             // console.log(buildingHighlightedCells);
         }
 
@@ -116,15 +113,7 @@ self.onmessage = e => {
                 }
             }
 
-            if (Atomics.load(collisionsMapMask, gridIdx) == 1) {
-                if (debug < 9) {
-                //     console.log()
-                    console.log(gridIdx)
-                    debug += 1;
-                }
-                ctx.fillStyle = `rgb(0,255,0,0.5)`;
-                ctx.fill();
-            }
+            
             
             
         }

@@ -2,9 +2,16 @@ import {
     PLAYER_STATE_ARRAY_INDEXES, 
     HEX_RADIUS,
     MAX_MOVABLES,
-    NUM_EXTRA_BITS
+    NUM_EXTRA_BITS,
+    MAP_HEIGHT,
+    MAP_WIDTH
 } from './constants.js';
-import { gridCoordsFromLocalMouse } from './helpers.js';
+import { 
+    gridCoordsFromLocalMouse,
+    convertCollisionBoxToLocalCoordinates,
+    get1DCoordinateFromXYCoordinate
+} from './helpers.js';
+import { buildings } from './buildings.js';
 
 const pauseButton = document.querySelector('#pauseButton');
 const tempAddWoodcutterButton = document.querySelector('#tempAddWoodcutterButton');
@@ -67,6 +74,11 @@ function init() {
     const gameState = new Uint32Array(gameStateSab);
     Atomics.store(gameState, 0, 0);
 
+    const terrainMapMaskSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
+    const collisionsMapMaskSab = new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
+    const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
+    collisionsMapMask.fill(0);
+
     tickThread.postMessage({
         movablePositionsSab,
         gameStateSab
@@ -76,6 +88,8 @@ function init() {
         gameCanvasOffscreen,
         playerStateSab,
         movablePositionsSab,
+        terrainMapMaskSab,
+        collisionsMapMaskSab,
         scale,
         widthVal  : window.innerWidth,
         heightVal : window.innerHeight,
@@ -111,7 +125,40 @@ function init() {
 
         let [y, x] = gridCoordsFromLocalMouse(e.clientX, e.clientY, leftLimit, topLimit, HEX_RADIUS)
         console.log(`${x}, ${y}`)
-        Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, -1);
+        
+        const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
+        if (currentBuildingIdx != -1) {
+            const buildingHighlightedCells = convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, x, y)
+            let allCellsAreValid = true;
+            for (let i = 0; i < buildingHighlightedCells.length; i++) {
+                const currentCell = buildingHighlightedCells[i];
+                if (currentCell[0] < 0 || 
+                    currentCell[0] > MAP_WIDTH || 
+                    currentCell[1] < 0 || 
+                    currentCell[1] > MAP_HEIGHT) {
+                    allCellsAreValid = false;
+                    break;
+                }
+                const current1DCoordinate = get1DCoordinateFromXYCoordinate(buildingHighlightedCells[i][0], buildingHighlightedCells[i][1], MAP_WIDTH);
+                if (Atomics.load(collisionsMapMask, current1DCoordinate) == 1) {
+                    allCellsAreValid = false;
+                    break;
+                }                
+            }
+            if (allCellsAreValid) {
+                // add all cells to collision map mask
+                for (let i = 0; i < buildingHighlightedCells.length; i++) {
+                    // console.log(buildingHighlightedCells[i]);
+                    const current1DCoordinate = get1DCoordinateFromXYCoordinate(buildingHighlightedCells[i][0], buildingHighlightedCells[i][1], MAP_WIDTH);
+                    // console.log(current1DCoordinate);
+                    Atomics.store(collisionsMapMask, current1DCoordinate, 1);
+                }
+                console.log(collisionsMapMask);
+            }
+
+            Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, -1);
+        }
+
     })
 
     // const startTime = performance.now();
