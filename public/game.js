@@ -85,7 +85,8 @@ function init() {
 
     tickThread.postMessage({
         movablePositionsSab,
-        gameStateSab
+        gameStateSab,
+        collisionsMapMaskSab
     });
 
     renderThread.postMessage({

@@ -3,7 +3,9 @@ import {
     NUM_EXTRA_BITS,
     MAX_SCHEDULE_DURATION_MS,
     TICK_PERIOD_MS,
-    MAP_WIDTH
+    MAP_WIDTH,
+    MAP_HEIGHT,
+    DIRECTIONS
 } from './constants.js';
 import helpers from './helpers.js';
 
@@ -35,18 +37,173 @@ class Task {
     }
 }
 
+// class ListMinBucketQueue {
+//     buckets = [];
+//     handles = []
+
+//     constructor(maxNumberOfIds) {
+//         buckets = new Array(4);
+//     }
+// }
+
+
+// find distance between two points
+function getHeuristicCost(sx, sy, tx, ty) {
+		const dx = (tx - sx);
+		const dy = (ty - sy);
+		const absDx = Math.abs(dx);
+		const absDy = Math.abs(dy);
+
+		if (dx * dy > 0) { // dx and dy go in the same direction
+			if (absDx > absDy) {
+				return absDx;
+			} else {
+				return absDy;
+			}
+		} else {
+			return absDx + absDy;
+		}
+	}
+
 
 self.onmessage = e => {
-    const { movablePositionsSab, gameStateSab } = e.data;
+    const { movablePositionsSab, gameStateSab, collisionsMapMaskSab } = e.data;
 
     const movablePositions   = new Uint32Array(movablePositionsSab); 
     const gameState = new Uint32Array(gameStateSab);
-// NORTH_EAST	0	−1
-// EAST	    +1	0
-// SOUTH_EAST	+1	+1
-// SOUTH_WEST	0	+1
-// WEST	    −1	0
-// NORTH_WEST	−1	−1
+    const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
+
+
+    function doAStar(movable, targetX, targetY) {
+        console.log(`Doing A* towards ${targetX}, ${targetY}`);
+        if (helpers.xyCellOutOfBounds(targetX, targetY, MAP_WIDTH, MAP_HEIGHT)) {
+            console.error(`Target is out of bounds`)
+            return null;
+        }
+
+
+        const targetFlatIdx = helpers.get1DCoordinateFromXYCoordinate(targetX, targetY, MAP_WIDTH);
+        console.log(targetFlatIdx);
+        // check if target is reachable
+        if (collisionsMapMask[targetFlatIdx] > 0) {
+            console.error(`Collision, can't walk into a collision`)
+            return null;
+        }  
+
+        const startFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(movable.path[movable.index], movable.path[movable.index + 1], MAP_WIDTH);
+
+        // in the 2015 code they had these permanently stored as 
+        // global variables shared for each A* for efficiency they're not creating/deleteing arrays all the time
+        const closedBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
+        const openBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
+
+        // this is our four buckets (a ListMinBucketQueue), need to implement
+        // let open = [[],[],[],[]];
+
+        let found = false;
+        let depthParentHeap = new Array(MAP_WIDTH * MAP_HEIGHT * 2);
+        depthParentHeap[startFlatIdx * 2]     =  0; // num steps from start
+        depthParentHeap[startFlatIdx * 2 + 1] = -1; // previous cell was non-existant
+
+        let costs = new Array(MAP_WIDTH * MAP_HEIGHT);
+        costs[startFlatIdx] = 0;
+
+        // open.insert(startFlatIdx, getHeuristicCost(startX, startY, targetX, targetY));
+        openBitSet[startFlatIdx] = 1;
+
+        let openIsEmpty = false;
+        // open
+        while (!openIsEmpty) {
+            let currentFlatIdx = 0 //open.deleteMin();
+
+            const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
+            closedBitSet[currentFlatIdx] = 1;
+
+            if (targetFlatIdx == currentFlatIdx) {
+                found = true;
+                break;
+            }
+
+            let currentPositionCosts = costs[currentFlatIdx];
+
+            // could be optimised to a regular for loop?
+            for (const [key, value] of Object.entries(DIRECTIONS)) {
+                const neighbourX = x + value[0];
+                const neighbourY = y + value[1];
+
+                if (helpers.xyCellOutOfBounds(neighbourX, neighbourY, MAP_WIDTH, MAP_HEIGHT)) {
+                    continue;
+                }
+
+                const neighbourFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(neighbourX, neighbourY, MAP_WIDTH);
+                // we've already searched this cell and don't want to search it again
+                if (closedBitSet[neighbourFlatIdx] == 1) {
+                    continue;
+                }
+
+                const newCosts = currentPositionCosts //+ Map.getCost();
+
+                // ideally could be re-written so that you've got an early exit in the case when newcosts is not larger than oldCosts
+                // because the logic when you're updating values is mostly the same in both branches of this "if"
+                if (openBitSet[neighbourFlatIdx]) {
+                    // we've already seen this cell so check if this is a shorter path to it
+                    const oldCosts = costs[neighbourFlatIdx];
+
+                    if (newCosts < oldCosts) {
+                        costs[neighbourFlatIdx] = newCosts;
+                        // current depth is 1 larger than previous cell
+                        depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
+                        // link to previous cell, saying "this is where I came from"
+                        depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
+
+                        // find distance between neighbour and target position
+                        const heuristicCosts = getHeuristicCost(neighbourX, neighbourY, targetX, targetY);
+                        // open.increasedPriority(neighbourFlatIdx, oldCosts + heuristicCosts, newCosts + heuristicCosts)
+                    }
+
+                } else {
+                    // we haven't seen this cell already, so fill in its values as default
+                    costs[neighbourFlatIdx] = newCosts;
+                    // current depth is 1 larger than previous cell
+                    depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
+                    // link to previous cell, saying "this is where I came from"
+                    depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
+
+                    openBitSet[neighbourFlatIdx] = 1;
+
+                    // find distance between neighbour and target position
+                    const heuristicCosts = getHeuristicCost(neighbourX, neighbourY, targetX, targetY);
+                    // open.insert(neighbourFlatIdx, newCosts + heuristicCosts)
+
+                    // Map.markAsOpen();
+                }
+
+            }
+            
+            openIsEmpty = true;
+        }
+
+        if (found) {
+            const pathLength = depthParentHeap[targetFlatIdx * 2];
+            let path = [];
+
+            let idx = pathLength;
+            let currentFlatIdx = targetFlatIdx;
+
+            while (idx > 0) {
+                idx--;
+                const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
+                path[idx * 2] = x;
+                path[idx * 2 + 1] = y;
+                currentFlatIdx = depthParentHeap[currentFlatIdx * 2 + 1];
+            }
+
+            movable.path = path;
+            return movable; 
+        } 
+        return null;
+
+    }
     
     // let dummyVillager = new Movable([5,3,5,2,4,2,3,2,2,2,2,1]);
     // let dummyVillager2 = new Movable([10,1,9,1,8,1]);
@@ -136,7 +293,12 @@ self.onmessage = e => {
             // console.log(currentGameStateTargetPosition)
             // if old target position doesn't match new target position, target position has changed, and the path should be recalculated
             if (currentTargetPositionAs1DCorrdinate != currentGameStateTargetPosition) {
+                // maybe should be just converting the currentGameStateTargetPosition into XY straight off the bat
+                // instead of doing two converstions.
+                const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentGameStateTargetPosition, MAP_WIDTH)
+                
                 // calculate bucketed A*
+                doAStar(movables[currentDebugUserIndex], x, y)
             }
         })
         //#endregion
