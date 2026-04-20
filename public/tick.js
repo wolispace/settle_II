@@ -82,6 +82,7 @@ class OpenBucketQueue {
         for (let i = 0; i < oldBucket.length; i++) {
             if (oldBucket[i] == val1D) {
                 oldBucket.splice(i, 1);
+                break;
             }
         }
         newBucket.push(val1D);
@@ -89,24 +90,31 @@ class OpenBucketQueue {
     }
 }
 
-
-// find distance between two points
+// note that this must always return an integer in order to be valid
 function getHeuristicCost(sx, sy, tx, ty) {
-		const dx = (tx - sx);
-		const dy = (ty - sy);
-		const absDx = Math.abs(dx);
-		const absDy = Math.abs(dy);
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const dz = -dx - dy;  // the implicit third axis
+    // "How many steps do I need? Well, I have three debts to pay and each 
+    // step pays two of them. The answer is whichever debt is largest — 
+    // the other two will get paid off along the way."
+    return Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+}
 
-		if (dx * dy > 0) { // dx and dy go in the same direction
-			if (absDx > absDy) {
-				return absDx;
-			} else {
-				return absDy;
-			}
-		} else {
-			return absDx + absDy;
-		}
-	}
+function cellIsWalkable(targetX, targetY, targetFlatIdx, collisionsMapMask) {
+    if (helpers.xyCellOutOfBounds(targetX, targetY, MAP_WIDTH, MAP_HEIGHT)) {
+        // console.error(`Target is out of bounds`)
+        return false;
+    }
+    
+    // check if target is reachable
+    if (collisionsMapMask[targetFlatIdx] > 0) {
+        // console.error(`Collision, can't walk into a collision`)
+        return false;
+    }  
+    return true;
+}
+
 
 
 self.onmessage = e => {
@@ -119,19 +127,13 @@ self.onmessage = e => {
 
     function doAStar(movable, targetX, targetY) {
         console.log(`Doing A* towards ${targetX}, ${targetY}`);
-        if (helpers.xyCellOutOfBounds(targetX, targetY, MAP_WIDTH, MAP_HEIGHT)) {
-            console.error(`Target is out of bounds`)
-            return null;
-        }
-
-
         const targetFlatIdx = helpers.get1DCoordinateFromXYCoordinate(targetX, targetY, MAP_WIDTH);
         console.log(targetFlatIdx);
-        // check if target is reachable
-        if (collisionsMapMask[targetFlatIdx] > 0) {
-            console.error(`Collision, can't walk into a collision`)
+
+        if (!cellIsWalkable(targetX, targetY, targetFlatIdx, collisionsMapMask)) {
+            // console.error(`Not able to walk to target`)
             return null;
-        }  
+        }
 
         const currentMovablePositionX = movable.path[movable.indexOfCurrentLocation];
         const currentMovablePositionY = movable.path[movable.indexOfCurrentLocation + 1];
@@ -140,19 +142,23 @@ self.onmessage = e => {
 
         // in the 2015 code they had these permanently stored as 
         // global variables shared for each A* for efficiency they're not creating/deleteing arrays all the time
-        // "have we already considered you?"
-        const closedBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
-        // "do we want to consider you?" this is used when seeing if we should be looking for a faster path
+        // "I have encountered this cell as a neighbour before"
         const openBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
-
+        // "I have processed this cell and it's neighbours before"
+        const closedBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
+        
         const open = new OpenBucketQueue();
 
         let found = false;
+        // note that we technically don't need two variables stored in this array
+        // because the step between every path is always 1
+        // and the first parameter can be derived based on the second parameter
         let depthParentHeap = new Array(MAP_WIDTH * MAP_HEIGHT * 2);
         depthParentHeap[startFlatIdx * 2]     =  0; // num steps from start
         depthParentHeap[startFlatIdx * 2 + 1] = -1; // previous cell was non-existant
 
         // how many steps to get to this point
+        // note that these must be integers
         let gCosts = new Array(MAP_WIDTH * MAP_HEIGHT);
         // this should be redundant because the array should be initialised with all zeros
         // but it can't hurt to be explicit
@@ -165,6 +171,9 @@ self.onmessage = e => {
             let currentFlatIdx = open.removeMin();
 
             const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
+            
+            
+            
             closedBitSet[currentFlatIdx] = 1;
 
             if (targetFlatIdx == currentFlatIdx) {
@@ -178,14 +187,9 @@ self.onmessage = e => {
             for (const [key, value] of Object.entries(DIRECTIONS)) {
                 const neighbourX = x + value[0];
                 const neighbourY = y + value[1];
-
-                if (helpers.xyCellOutOfBounds(neighbourX, neighbourY, MAP_WIDTH, MAP_HEIGHT)) {
-                    continue;
-                }
-
                 const neighbourFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(neighbourX, neighbourY, MAP_WIDTH);
-                // we've already searched this cell and don't want to search it again
-                if (closedBitSet[neighbourFlatIdx] == 1) {
+
+                if (!cellIsWalkable(neighbourX, neighbourY, neighbourFlatIdx, collisionsMapMask)) {
                     continue;
                 }
 

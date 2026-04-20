@@ -59,15 +59,14 @@ export default {
     },
 
     xyCellOutOfBounds(x, y, mapWidth, mapHeight) {
-        // check if the target is within bounds
-        // this maybe should be greater than or equal to MAP_WIDTH/HEIGHT, haven't thought about it yet
-        // note that this logic doesn't work, can't handle clicking to the left of the map
-        // if (   targetX < 0 
-        //     || targetX > MAP_WIDTH
-        //     || targetY < 0 
-        //     || targetY > MAP_HEIGHT) {
-        //     console.error(`Target is out of bounds`)
-        //     return null;
-        // }
+        if (x < 0
+            || x >= mapWidth
+            || y < 0
+            || y >= mapHeight) {
+            console.error(`Target is out of bounds`)
+            return true;
+        }
+        return false;
     }
+
 };

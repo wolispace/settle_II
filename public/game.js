@@ -130,6 +130,10 @@ function init() {
 
         let [y, x] = helpers.gridCoordsFromLocalMouse(e.clientX, e.clientY, leftLimit, topLimit, HEX_RADIUS)
         console.log(`${x}, ${y}`)
+
+        if (helpers.xyCellOutOfBounds(x, y, MAP_WIDTH, MAP_HEIGHT)) {
+            return; // ignore out-of-bounds clicks
+        }
         
         const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
         if (currentBuildingIdx != -1) {
