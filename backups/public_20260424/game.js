@@ -8,7 +8,6 @@ import {
 } from './constants.js';
 import helpers from './helpers.js';
 import { buildings } from './buildings.js';
-import { Jerver } from "https://joshprojects.site/modules/Jerver/V1.2.1.js";
 
 const pauseButton = document.querySelector('#pauseButton');
 const tempAddWoodcutterButton = document.querySelector('#tempAddWoodcutterButton');
@@ -34,23 +33,6 @@ function fullScreenCanvas(elem) {
 }
 
 function init() { 
-
-	let jerver = new Jerver({
-		url:'https://jproj.xyz',
-		socketHandlerName: "jproj.xyz/settle"
-	})
-	jerver.on('messageToUser', (messageToUser)=>{
-		console.log({messageToUser});
-		if (messageToUser.actionType == 'moveCharacter') {
-			Atomics.store(gameState, messageToUser.character, messageToUser.coordinate);
-		}
-	})
-	jerver.ready((userData)=>{
-		console.log(`Ready is done`)
-		// this.currentUserData = userData;
-	});
-	
-
 
     // for testing only, to be removed, allow users to set their index
     window.me = 1;
@@ -188,18 +170,8 @@ function init() {
             Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, -1);
         } else {
             // for debugging purposes only, to be removed later
-			let coordinate = helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH)
-            Atomics.store(gameState, window.me, coordinate);
+            Atomics.store(gameState, window.me, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH));
             console.log(gameState);
-			jerver.send('messageToServer',{
-				roomName: window.roomName,
-				actionType: 'moveCharacter',
-				character: window.me,
-				coordinate: coordinate
-			}).then((result)=>{
-				console.log({result})
-				
-			});
         }
 
     })
@@ -260,13 +232,6 @@ function init() {
     roomForm.addEventListener('submit', (e)=>{
         e.preventDefault();
         console.log(roomValue.value)
-		window.roomName = roomValue.value
-		jerver.send('joinRoom',{
-			roomName: window.roomName
-		}).then((result)=>{
-			console.log({result})
-			
-		});
     })
 }
 
