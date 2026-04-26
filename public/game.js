@@ -43,7 +43,22 @@ function init() {
 		console.log({messageToUser});
 		if (messageToUser.actionType == 'moveCharacter') {
 			Atomics.store(gameState, messageToUser.character, messageToUser.coordinate);
+		} else if (messageToUser.actionType == 'placeBuilding') {
+			const buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildings[messageToUser.currentBuildingIdx].collisionBox, messageToUser.x, messageToUser.y)
+
+			for (let i = 0; i < buildingHighlightedCells.length; i++) {
+				// console.log(buildingHighlightedCells[i]);
+				const current1DCoordinate = helpers.get1DCoordinateFromXYCoordinate(buildingHighlightedCells[i][0], buildingHighlightedCells[i][1], MAP_WIDTH);
+				// console.log(current1DCoordinate);
+				Atomics.store(collisionsMapMask, current1DCoordinate, 1);
+			}
+
 		}
+
+		tickThread.postMessage({
+			isNewTickTask: true,
+			messageToUser: messageToUser
+		});
 	})
 	jerver.ready((userData)=>{
 		console.log(`Ready is done`)
@@ -103,10 +118,15 @@ function init() {
     const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
     collisionsMapMask.fill(0);
 
+    const drawableResourcesMapMaskSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
+	const drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
+	drawableResourcesMapMask.fill(0);
+
     tickThread.postMessage({
         movablePositionsSab,
         gameStateSab,
-        collisionsMapMaskSab
+        collisionsMapMaskSab,
+		drawableResourcesMapMaskSab
     });
 
     renderThread.postMessage({
@@ -115,6 +135,7 @@ function init() {
         movablePositionsSab,
         terrainMapMaskSab,
         collisionsMapMaskSab,
+		drawableResourcesMapMaskSab,
         scale,
         widthVal  : window.innerWidth,
         heightVal : window.innerHeight,
@@ -172,9 +193,14 @@ function init() {
                 if (Atomics.load(collisionsMapMask, current1DCoordinate) == 1) {
                     allCellsAreValid = false;
                     break;
-                }                
+                }   
+				if (Atomics.load(drawableResourcesMapMask, current1DCoordinate) == 1) {
+                    allCellsAreValid = false;
+                    break;
+                }               
             }
             if (allCellsAreValid) {
+				
                 // add all cells to collision map mask
                 for (let i = 0; i < buildingHighlightedCells.length; i++) {
                     // console.log(buildingHighlightedCells[i]);
@@ -182,7 +208,20 @@ function init() {
                     // console.log(current1DCoordinate);
                     Atomics.store(collisionsMapMask, current1DCoordinate, 1);
                 }
-                console.log(collisionsMapMask);
+				let message = {
+					roomName: window.roomName,
+					actionType: 'placeBuilding',
+					x: x,
+					y: y,
+					currentBuildingIdx: currentBuildingIdx
+				}
+				jerver.send('messageToServer', message)
+
+				tickThread.postMessage({
+					isNewTickTask: true,
+					messageToUser: message
+				});
+                // console.log(collisionsMapMask);
             }
 
             Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, -1);
@@ -190,16 +229,13 @@ function init() {
             // for debugging purposes only, to be removed later
 			let coordinate = helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH)
             Atomics.store(gameState, window.me, coordinate);
-            console.log(gameState);
+            // console.log(gameState);
 			jerver.send('messageToServer',{
 				roomName: window.roomName,
 				actionType: 'moveCharacter',
 				character: window.me,
 				coordinate: coordinate
-			}).then((result)=>{
-				console.log({result})
-				
-			});
+			})
         }
 
     })
@@ -256,6 +292,12 @@ function init() {
         console.log(`clicked tempAddSawmillButton`);
         Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, 1);
     })
+
+	// while developing, auto join the joshnwolis room
+	window.roomName = 'joshnwolis'
+	jerver.send('joinRoom',{
+		roomName: window.roomName
+	})
 
     roomForm.addEventListener('submit', (e)=>{
         e.preventDefault();

@@ -10,10 +10,21 @@ import helpers from './helpers.js';
 import { buildings } from './buildings.js';
 
 self.onmessage = e => {
-    const { gameCanvasOffscreen, playerStateSab, movablePositionsSab, terrainMapMaskSab, collisionsMapMaskSab, scale, widthVal, heightVal } = e.data;
+    const { 
+		gameCanvasOffscreen, 
+		playerStateSab, 
+		movablePositionsSab, 
+		terrainMapMaskSab, 
+		collisionsMapMaskSab, 
+		drawableResourcesMapMaskSab, 
+		scale, 
+		widthVal, 
+		heightVal 
+	} = e.data;
 
     const playStateArray = new Int32Array(playerStateSab); 
     const movablePositions = new Uint32Array(movablePositionsSab); 
+	const drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
 
     const ctx = gameCanvasOffscreen.getContext('2d');
     ctx.scale(scale, scale);
@@ -111,12 +122,22 @@ self.onmessage = e => {
             }
 
             if (Atomics.load(collisionsMapMask, gridIdx) == 1) {
-                if (debug < 9) {
-                //     console.log()
-                    console.log(gridIdx)
-                    debug += 1;
-                }
+                // if (debug < 9) {
+                // //     console.log()
+                //     console.log(gridIdx)
+                //     debug += 1;
+                // }
                 ctx.fillStyle = `rgb(0,255,0,0.5)`;
+                ctx.fill();
+            }
+
+			if (Atomics.load(drawableResourcesMapMask, gridIdx) == 1) {
+                // if (debug < 9) {
+                // //     console.log()
+                //     console.log(gridIdx)
+                //     debug += 1;
+                // }
+                ctx.fillStyle = `#785d31`;
                 ctx.fill();
             }
             

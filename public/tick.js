@@ -34,6 +34,42 @@ class Movable {
     }
 }
 
+class TaskQueue {
+	taskRingBuffer;
+	totalTicks;
+	taskPointer = 0;
+
+	constructor(totalTicks) {
+		this.totalTicks = totalTicks;
+		this.taskRingBuffer = new Array(this.totalTicks);
+	}
+
+	get currentTickTasks() {
+		return this.taskRingBuffer[this.taskPointer];
+	}
+
+	addTask(index, task) {
+		if (this.taskRingBuffer[index] == undefined) {
+			this.taskRingBuffer[index] = [];
+		}
+		this.taskRingBuffer[index].push(task);
+	}
+
+	doCurrentTasks() {
+		for (let i = 0; i < this.currentTickTasks?.length; i++) {
+            this.currentTickTasks[i].todo();
+
+            if (this.currentTickTasks[i].rescheduleDurationInTicks) {
+                const nextPointerPosition = (this.taskPointer + this.currentTickTasks[i].rescheduleDurationInTicks) % this.totalTicks;
+				this.addTask(nextPointerPosition, this.currentTickTasks[i]);
+            }
+        }
+
+		this.taskRingBuffer[this.taskPointer] = [];
+        this.taskPointer = (this.taskPointer+1) % this.totalTicks;
+	}
+}
+
 class Task {
     todo;
     rescheduleDurationInTicks;
@@ -116,18 +152,120 @@ function cellIsWalkable(targetX, targetY, targetFlatIdx, collisionsMapMask) {
         // console.error(`Collision, can't walk into a collision`)
         return false;
     }  
+
+	//#region - check if the target is in the same region/landmass as the movable
+	//#endregion
+
     return true;
 }
 
 
+class Resources {
+	knownResources = [];
+	drawableResourcesMapMask;
+
+	constructor() { }
+
+	add(x,y) {
+		this.knownResources.push(new Resource(this, x,y))
+	}
+}
+
+class Resource {
+	resources;
+	type = "wood";
+	qty = 1;
+	carriedBy = null;
+	floorLocation;
+
+	constructor(resources, x,y) {
+		this.resources = resources;
+		this.setLocation(x,y)
+	}
+
+	setLocation(x,y) {
+		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH), 1);
+	}
+}
+
+class Buildings {
+	knownBuildings = [];
+
+	constructor() {}
+
+	add(buildingIndex, x, y) {
+		this.knownBuildings.push(new Building(buildingIndex, x, y))
+	}
+}
+
+class Building {
+	buildingIndex;
+	x;
+	y;
+
+	constructor(buildingIndex, x, y) {	
+		this.buildingIndex = buildingIndex;
+		this.x = x;
+		this.y = y;
+
+		taskQueue.addTask(taskQueue.taskPointer + 4, new Task((i)=>{
+			console.log(`find me wood`)
+	
+			// while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
+			// 	// console.log("tick waiting for render to be ready");
+			// }
+	
+			// Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
+			// for (let i = 0; i < movables.length; i++) {
+			// 	// share the current position with the render thread
+			// 	movablePositions[i*2] = movables[i].path[movables[i].indexOfCurrentLocation];
+			// 	movablePositions[i*2+1] = movables[i].path[movables[i].indexOfCurrentLocation + 1];
+				
+			// 	// do you have anywhere left to go?
+			// 	if (movables[i].indexOfCurrentLocation + 2 >= movables[i].path.length) {
+			// 		continue;
+			// 	} 
+	
+			// 	// if you have anywhere left to go, go there
+			// 	movables[i].indexOfCurrentLocation+=2;
+			// }
+			// // atomic commands act as a memory fence around non-sequential commands (which are faster)
+			// Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
+		}, 750));
+	}
+}
+
+
+
+const totalTicks = MAX_SCHEDULE_DURATION_MS/TICK_PERIOD_MS;
+
+let resources = new Resources();
+let buildings = new Buildings();
+let taskQueue = new TaskQueue(totalTicks);
+
 
 self.onmessage = e => {
-    const { movablePositionsSab, gameStateSab, collisionsMapMaskSab } = e.data;
+	if (e.data.isNewTickTask) {
+		console.log(`>>>>`)
+		console.log(e.data.messageToUser)
+		if (e.data.messageToUser.actionType == 'placeBuilding') {
+			buildings.add(e.data.messageToUser.currentBuildingIdx, e.data.messageToUser.x, e.data.messageToUser.y)
+			console.log(buildings);
+		}
+
+		return;
+	} 
+	
+    const { movablePositionsSab, gameStateSab, collisionsMapMaskSab, drawableResourcesMapMaskSab } = e.data;
 
     const movablePositions   = new Uint32Array(movablePositionsSab); 
     const gameState = new Uint32Array(gameStateSab);
     const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
+	resources.drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
 
+	// create a dummy piece of wood for testing
+	resources.add(10,10);
+	resources.add(15,2);
 
     function doAStar(movable, targetX, targetY) {
         console.log(`Doing A* towards ${targetX}, ${targetY}`);
@@ -146,14 +284,19 @@ self.onmessage = e => {
 
         // in the 2015 code they had these permanently stored as 
         // global variables shared for each A* for efficiency they're not creating/deleteing arrays all the time
+		// however they clear the bit masks every time the A* is performed
         // "I have encountered this cell as a neighbour before"
         const openBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
         // "I have processed this cell and it's neighbours before"
         const closedBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
         
+		// in the 2015 code they have this assigned as a global variable, and it's only 
+		// ever read after being written to so it's okay not to even clear it between timed A* is performed
         const open = new OpenBucketQueue();
 
         let found = false;
+		// in the 2015 code they have this assigned as a global variable, and it's only 
+		// ever read after being written to so it's okay not to even clear it between timed A* is performed
         // note that we technically don't need two variables stored in this array
         // because the step between every path is always 1
         // and the first parameter can be derived based on the second parameter
@@ -161,6 +304,8 @@ self.onmessage = e => {
         depthParentHeap[startFlatIdx * 2]     =  0; // num steps from start
         depthParentHeap[startFlatIdx * 2 + 1] = -1; // previous cell was non-existant
 
+		// in the 2015 code they have this assigned as a global variable, and it's only 
+		// ever read after being written to so it's okay not to even clear it between timed A* is performed
         // how many steps to get to this point
         // note that these must be integers
         let gCosts = new Array(MAP_WIDTH * MAP_HEIGHT);
@@ -287,10 +432,8 @@ self.onmessage = e => {
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
     }, 750);
 
-    const totalTicks = MAX_SCHEDULE_DURATION_MS/TICK_PERIOD_MS;
-    const tasks = new Array(totalTicks);
-    tasks[0] = [moveAllMovablesTask];
-    let taskPointer = 0;
+	taskQueue.addTask(0, moveAllMovablesTask);
+        
 
     let movables = [new Movable([0,0])];
     movables.push(new Movable([5,1, 4,1, 3,1, 2,1, 1,1]));
@@ -339,7 +482,7 @@ self.onmessage = e => {
             return;
         }
 
-        //#region - for debug: check if each players position is different from their target position
+        // #region - for debug: check if each players position is different from their target position
         [1,2].forEach((currentDebugUserIndex)=>{
             const currentTargetPositionAsXYCoordinate = movables[currentDebugUserIndex].targetPosition
             // console.log(currentTargetPositionAsXYCoordinate)
@@ -365,23 +508,7 @@ self.onmessage = e => {
         })
         //#endregion
 
-        let currentTickTasks = tasks[taskPointer];
-        
-        for (let i = 0; i < currentTickTasks?.length; i++) {
-            currentTickTasks[i].todo();
-
-            if (currentTickTasks[i].rescheduleDurationInTicks) {
-                const nextPointerPosition = (taskPointer + currentTickTasks[i].rescheduleDurationInTicks) % totalTicks;
-                if (tasks[nextPointerPosition] == undefined) {
-                    tasks[nextPointerPosition] = [];
-                }
-                tasks[nextPointerPosition].push(currentTickTasks[i]);
-            }
-        }
-
-        tasks[taskPointer] = [];
-        taskPointer = (taskPointer+1) % totalTicks;
-        
+        taskQueue.doCurrentTasks();
         
         const endTime = performance.now();
         // console.log(`Tick duration: ${endTime - startTime} ms`);
@@ -389,18 +516,4 @@ self.onmessage = e => {
 
     tick();
     let refVar = setInterval(tick, TICK_PERIOD_MS);
-
-
-    // 
-    
-    // for (let i = 0; i < numElements; i++) {   
-    //     Atomics.store(resultArray, i, Atomics.load(arrayOfThings1, i) + Atomics.load(arrayOfThings2, i));
-    // }
-    
-    // const endTime = performance.now();
-    
-    // console.log(`Execution time when running in worker: ${endTime - startTime} ms`);
-    // console.log(arrayOfThings1);
-    // console.log(arrayOfThings2);
-    // console.log(resultArray);
 }
