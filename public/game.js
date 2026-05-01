@@ -7,7 +7,7 @@ import {
     MAP_WIDTH
 } from './constants.js';
 import helpers from './helpers.js';
-import { buildings } from './buildings.js';
+import { buildingTypes } from './buildingTypes.js';
 import { Jerver } from "https://joshprojects.site/modules/Jerver/V1.2.1.js";
 
 const pauseButton = document.querySelector('#pauseButton');
@@ -44,7 +44,7 @@ function init() {
 		if (messageToUser.actionType == 'moveCharacter') {
 			Atomics.store(gameState, messageToUser.character, messageToUser.coordinate);
 		} else if (messageToUser.actionType == 'placeBuilding') {
-			const buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildings[messageToUser.currentBuildingIdx].collisionBox, messageToUser.x, messageToUser.y)
+			const buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildingTypes[messageToUser.currentBuildingIdx].collisionBox, messageToUser.x, messageToUser.y)
 
 			for (let i = 0; i < buildingHighlightedCells.length; i++) {
 				// console.log(buildingHighlightedCells[i]);
@@ -178,7 +178,7 @@ function init() {
         
         const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
         if (currentBuildingIdx != -1) {
-            const buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, x, y)
+            const buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildingTypes[currentBuildingIdx].collisionBox, x, y)
             let allCellsAreValid = true;
             for (let i = 0; i < buildingHighlightedCells.length; i++) {
                 const currentCell = buildingHighlightedCells[i];

@@ -8,30 +8,114 @@ import {
     DIRECTIONS
 } from './constants.js';
 import helpers from './helpers.js';
+import { buildingTypes } from './buildingTypes.js';
 
-class Movable {
-    #path;
+// a quest is single step in a quest that a movable takes on
+class Action {
+	// each Action has a path, but that path might just be a single location
+	// e.g. the location of a building as it drops something off, or the location of a resource as it picks it up
+	#path;
     // note that this is set before animating to that position so it might not look like we're there yet
     indexOfCurrentLocation = 0;
 
-    constructor(path) {
+	constructor(path) {
         this.#path = path;
     }
+
+	get currentLocationXY() {
+		return [this.#path[this.indexOfCurrentLocation], this.#path[this.indexOfCurrentLocation + 1]];
+	}
 
     get path() {
         return this.#path;
     }
 
-    set path(path) {
-        this.#path = path;
-        // this.path = new Int32Array(new ArrayBuffer(6 * 2));
-        this.indexOfCurrentLocation = 0;
+	incrementPath() {
+		if (this.isFinished) {
+			return;
+		}
+
+		this.indexOfCurrentLocation += 2;
+	}
+
+    // set path(path) {
+    //     this.#path = path;
+    //     // this.path = new Int32Array(new ArrayBuffer(6 * 2));
+    //     this.indexOfCurrentLocation = 0;
+    // }
+
+	get isFinished() {
+		return this.indexOfCurrentLocation + 2 >= this.#path.length;
+	}
+}
+
+class Movables {
+	knownMovables = [];
+	// idleMovables could exist here
+
+	constructor() {
+
+	}
+
+	add(movable) {
+		this.knownMovables.push(movable);
+	}
+}
+
+class Movable {
+
+	#quest = [];
+	indexOfCurrentQuestAction = 0;
+
+    constructor(quest) {
+        this.#quest = quest;
     }
 
-    get targetPosition() {
-        // this feels messy, could be updated to be more dynamic in case the path array structure changes
-        return [this.path[this.path.length - 2] , this.path[this.path.length - 1]];
-    }
+	get currentLocationXY() {
+		return this.#quest[this.indexOfCurrentQuestAction].currentLocationXY;
+	}
+
+	
+
+    // get path() {
+    //     return this.#path;
+    // }
+
+	set quest(quest) {
+		this.#quest = quest;
+		this.indexOfCurrentQuestAction = 0;
+	}
+
+    // set path(path) {
+    //     this.#path = path;
+    //     // this.path = new Int32Array(new ArrayBuffer(6 * 2));
+    //     this.indexOfCurrentLocation = 0;
+    // }
+
+	// maybe not needed if we're not testing the path planning any more
+    // get targetPosition() {
+    //     // this feels messy, could be updated to be more dynamic in case the path array structure changes
+    //     return [this.path[this.path.length - 2] , this.path[this.path.length - 1]];
+    // }
+
+	incrementQuest() {
+		// if idle, don't move to the next step
+		if (this.isIdle()) {
+			return;
+		} 
+
+		if (this.#quest[this.indexOfCurrentQuestAction].isFinished) {
+			// current action has no more steps and we should increment the quest
+			this.indexOfCurrentQuestAction+=1;
+		} else {
+			// current action still has more steps then increment its path
+			this.#quest[this.indexOfCurrentQuestAction].incrementPath();
+		}
+	}
+
+	isIdle() {
+		return this.indexOfCurrentQuestAction + 1 >= this.#quest.length && this.#quest[this.indexOfCurrentQuestAction].isFinished;
+	}
 }
 
 class TaskQueue {
@@ -208,9 +292,59 @@ class Building {
 		this.x = x;
 		this.y = y;
 
+		resourceRequests.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources))	
+	}
+}
+
+class ResourceRequests {
+	knownResourceRequests = [];
+
+	constructor() {
+
+	}
+
+	add(newResourceRequest) {
+		this.knownResourceRequests.push(newResourceRequest)
+	}
+}
+
+class ResourceRequest {
+	source;
+	qty;
+
+	constructor(source, qty) {
+		this.source = source;
+		this.qty = qty;
+
 		taskQueue.addTask(taskQueue.taskPointer + 4, new Task((i)=>{
-			console.log(`find me wood`)
-	
+			console.log(`find me ${this.qty} wood`)
+
+			//#region - check if there are any resources, if not, do an early exit
+			if (resources.knownResources.length == 0) {
+				return;
+			}
+			//#endregion
+
+			//#region - if there are resources, now check to see if there are any idle villager, if not do an early exit
+			// probably would be more optimal to be storing an array of idle villagers instead of doing this check on the fly
+			let foundIdleVillager = false;
+			for (let i = 0; i < movables.knownMovables.length; i++) {
+				if (movables.knownMovables[i].isIdle()) {
+					foundIdleVillager = true;
+					break;
+				}
+			}
+			//#endregion
+
+			//#region - if there are both resources and also idle villagers, assign the task to the villager
+			// let closestResource = resources.findClosestTo(this.source.x, this.source.y);
+
+			// let closestVillager = movables.findClosestIdleTo(closestResource.x, closestResource.y)
+			
+			
+			//#endregion
+
+
 			// while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
 			// 	// console.log("tick waiting for render to be ready");
 			// }
@@ -231,17 +365,18 @@ class Building {
 			// }
 			// // atomic commands act as a memory fence around non-sequential commands (which are faster)
 			// Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
-		}, 750));
+		}));
 	}
 }
 
 
-
 const totalTicks = MAX_SCHEDULE_DURATION_MS/TICK_PERIOD_MS;
 
+let movables = new Movables()
 let resources = new Resources();
 let buildings = new Buildings();
 let taskQueue = new TaskQueue(totalTicks);
+let resourceRequests = new ResourceRequests();
 
 
 self.onmessage = e => {
@@ -277,8 +412,7 @@ self.onmessage = e => {
             return null;
         }
 
-        const currentMovablePositionX = movable.path[movable.indexOfCurrentLocation];
-        const currentMovablePositionY = movable.path[movable.indexOfCurrentLocation + 1];
+        const [currentMovablePositionX, currentMovablePositionY] = movable.currentLocationXY;
 
         const startFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(currentMovablePositionX, currentMovablePositionY, MAP_WIDTH);
 
@@ -313,7 +447,7 @@ self.onmessage = e => {
         // but it can't hurt to be explicit
         gCosts[startFlatIdx] = 0;
 
-        open.add(startFlatIdx, getHeuristicCost(movable.path[movable.indexOfCurrentLocation], movable.path[movable.indexOfCurrentLocation + 1], targetX, targetY));
+        open.add(startFlatIdx, getHeuristicCost(currentMovablePositionX, currentMovablePositionY, targetX, targetY));
         openBitSet[startFlatIdx] = 1;
 
         while (open.totalCount > 0) {
@@ -395,7 +529,7 @@ self.onmessage = e => {
                 idx--;
             }
 
-            movable.path = path
+            movable.quest = [new Action(path)]
             return movable; 
         } 
         console.error(`No path found`);
@@ -415,18 +549,13 @@ self.onmessage = e => {
         }
 
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
-        for (let i = 0; i < movables.length; i++) {
+        for (let i = 0; i < movables.knownMovables.length; i++) {
             // share the current position with the render thread
-            movablePositions[i*2] = movables[i].path[movables[i].indexOfCurrentLocation];
-            movablePositions[i*2+1] = movables[i].path[movables[i].indexOfCurrentLocation + 1];
+			let currentPosition = movables.knownMovables[i].currentLocationXY;
+            movablePositions[i*2] = currentPosition[0];
+            movablePositions[i*2+1] = currentPosition[1];
             
-            // do you have anywhere left to go?
-            if (movables[i].indexOfCurrentLocation + 2 >= movables[i].path.length) {
-                continue;
-            } 
-
-            // if you have anywhere left to go, go there
-            movables[i].indexOfCurrentLocation+=2;
+			movables.knownMovables[i].incrementQuest();
         }
         // atomic commands act as a memory fence around non-sequential commands (which are faster)
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
@@ -435,9 +564,10 @@ self.onmessage = e => {
 	taskQueue.addTask(0, moveAllMovablesTask);
         
 
-    let movables = [new Movable([0,0])];
-    movables.push(new Movable([5,1, 4,1, 3,1, 2,1, 1,1]));
-    movables.push(new Movable([5,2, 4,2, 3,2, 2,2, 1,2]));
+    
+	movables.add(new Movable([new Action([0,0])]))
+    movables.add(new Movable([new Action([5,1, 4,1, 3,1, 2,1, 1,1])]));
+    movables.add(new Movable([new Action([5,2, 4,2, 3,2, 2,2, 1,2])]));
    
 
     //#region - add 20_000 people and have them wander randomly
@@ -483,29 +613,29 @@ self.onmessage = e => {
         }
 
         // #region - for debug: check if each players position is different from their target position
-        [1,2].forEach((currentDebugUserIndex)=>{
-            const currentTargetPositionAsXYCoordinate = movables[currentDebugUserIndex].targetPosition
-            // console.log(currentTargetPositionAsXYCoordinate)
-            const currentTargetPositionAs1DCorrdinate = helpers.get1DCoordinateFromXYCoordinate(currentTargetPositionAsXYCoordinate[0], currentTargetPositionAsXYCoordinate[1], MAP_WIDTH)
-            // console.log(currentTargetPositionAs1DCorrdinate);
-            const currentGameStateTargetPosition = Atomics.load(gameState, currentDebugUserIndex);
-            // console.log(currentGameStateTargetPosition)
-            // if old target position doesn't match new target position, target position has changed, and the path should be recalculated
-            if (currentTargetPositionAs1DCorrdinate != currentGameStateTargetPosition) {
-                console.log(currentTargetPositionAs1DCorrdinate, currentGameStateTargetPosition);
-                // maybe should be just converting the currentGameStateTargetPosition into XY straight off the bat
-                // instead of doing two converstions.
-                const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentGameStateTargetPosition, MAP_WIDTH)
+        // [1,2].forEach((currentDebugUserIndex)=>{
+        //     const currentTargetPositionAsXYCoordinate = movables.knownMovables[currentDebugUserIndex].targetPosition
+        //     // console.log(currentTargetPositionAsXYCoordinate)
+        //     const currentTargetPositionAs1DCorrdinate = helpers.get1DCoordinateFromXYCoordinate(currentTargetPositionAsXYCoordinate[0], currentTargetPositionAsXYCoordinate[1], MAP_WIDTH)
+        //     // console.log(currentTargetPositionAs1DCorrdinate);
+        //     const currentGameStateTargetPosition = Atomics.load(gameState, currentDebugUserIndex);
+        //     // console.log(currentGameStateTargetPosition)
+        //     // if old target position doesn't match new target position, target position has changed, and the path should be recalculated
+        //     if (currentTargetPositionAs1DCorrdinate != currentGameStateTargetPosition) {
+        //         console.log(currentTargetPositionAs1DCorrdinate, currentGameStateTargetPosition);
+        //         // maybe should be just converting the currentGameStateTargetPosition into XY straight off the bat
+        //         // instead of doing two converstions.
+        //         const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentGameStateTargetPosition, MAP_WIDTH)
                 
-                // calculate bucketed A*
-                let aStarReturn = doAStar(movables[currentDebugUserIndex], x, y);
-                console.log({aStarReturn});
-                if (!aStarReturn) {
-                    console.error(`PAUSE`);
-                    clearInterval(refVar);
-                }
-            }
-        })
+        //         // calculate bucketed A*
+        //         let aStarReturn = doAStar(movables.knownMovables[currentDebugUserIndex], x, y);
+        //         console.log({aStarReturn});
+        //         if (!aStarReturn) {
+        //             console.error(`PAUSE`);
+        //             clearInterval(refVar);
+        //         }
+        //     }
+        // })
         //#endregion
 
         taskQueue.doCurrentTasks();

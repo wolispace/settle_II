@@ -7,7 +7,7 @@ import {
     MAP_WIDTH
 } from './constants.js';
 import helpers from './helpers.js';
-import { buildings } from './buildings.js';
+import { buildingTypes } from './buildingTypes.js';
 
 self.onmessage = e => {
     const { 
@@ -76,7 +76,7 @@ self.onmessage = e => {
         const currentBuildingIdx = Atomics.load(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE);
 
         if (currentBuildingIdx != -1) {
-            buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildings[currentBuildingIdx].collisionBox, mouseXAsCell, mouseYAsCell)
+            buildingHighlightedCells = helpers.convertCollisionBoxToLocalCoordinates(buildingTypes[currentBuildingIdx].collisionBox, mouseXAsCell, mouseYAsCell)
             // console.log(buildingHighlightedCells);
         }
 
