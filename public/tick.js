@@ -17,9 +17,12 @@ class Action {
 	#path;
     // note that this is set before animating to that position so it might not look like we're there yet
     indexOfCurrentLocation = 0;
+	uponFinished;
+	isFinishedCallback = false;
 
-	constructor(path) {
+	constructor(path, uponFinished = ()=>{}) {
         this.#path = path;
+		this.uponFinished = uponFinished;
     }
 
 	get currentLocationXY() {
@@ -31,7 +34,7 @@ class Action {
     }
 
 	incrementPath() {
-		if (this.isFinished) {
+		if (this.isFinishedMoving) {
 			return;
 		}
 
@@ -44,7 +47,7 @@ class Action {
     //     this.indexOfCurrentLocation = 0;
     // }
 
-	get isFinished() {
+	get isFinishedMoving() {
 		return this.indexOfCurrentLocation + 2 >= this.#path.length;
 	}
 }
@@ -60,22 +63,47 @@ class Movables {
 	add(movable) {
 		this.knownMovables.push(movable);
 	}
+
+	findClosestIdleTo(x, y) {
+		let closesDistance = furthestDiagonalDistance;
+		let foundIdle = null;
+		for (let i = 0; i < this.knownMovables.length; i++) {
+			if (!this.knownMovables[i].isIdle()) {
+				continue;
+			}
+			const currentDistance = this.knownMovables[i].getDistanceTo(x, y);
+			if (currentDistance < closesDistance) {
+				foundIdle = this.knownMovables[i];
+				closesDistance = currentDistance;
+			}
+		}
+		return foundIdle;
+	}
 }
 
 class Movable {
 
 	#quest = [];
 	indexOfCurrentQuestAction = 0;
+	heldResource = null;
 
     constructor(quest) {
         this.#quest = quest;
     }
 
+	// this maybe should be private, because you should be accessing the x and y getters individually
 	get currentLocationXY() {
+		// console.trace();
 		return this.#quest[this.indexOfCurrentQuestAction].currentLocationXY;
 	}
 
-	
+	get x() {
+		return this.currentLocationXY[0];
+	}
+
+	get y() {
+		return this.currentLocationXY[1];
+	}
 
     // get path() {
     //     return this.#path;
@@ -104,9 +132,18 @@ class Movable {
 			return;
 		} 
 
-		if (this.#quest[this.indexOfCurrentQuestAction].isFinished) {
-			// current action has no more steps and we should increment the quest
-			this.indexOfCurrentQuestAction+=1;
+		// if (this.x == 1 && this.y == 0) {
+		// 	console.log(this);
+		// }
+
+		if (this.#quest[this.indexOfCurrentQuestAction].isFinishedMoving) {
+			// console.log(`Doing uponFinished...`);
+			this.#quest[this.indexOfCurrentQuestAction].uponFinished();
+			this.#quest[this.indexOfCurrentQuestAction].isFinishedCallback = true;
+			// only increment the quest if there are more quests to increment to
+			if (this.indexOfCurrentQuestAction < this.#quest.length - 1) {
+				this.indexOfCurrentQuestAction+=1;
+			}
 		} else {
 			// current action still has more steps then increment its path
 			this.#quest[this.indexOfCurrentQuestAction].incrementPath();
@@ -114,7 +151,11 @@ class Movable {
 	}
 
 	isIdle() {
-		return this.indexOfCurrentQuestAction + 1 >= this.#quest.length && this.#quest[this.indexOfCurrentQuestAction].isFinished;
+		return this.indexOfCurrentQuestAction + 1 >= this.#quest.length && this.#quest[this.indexOfCurrentQuestAction].isFinishedCallback;
+	}
+
+	getDistanceTo(x, y) {
+		return getHeuristicCost(x, y, this.x, this.y)
 	}
 }
 
@@ -253,22 +294,60 @@ class Resources {
 	add(x,y) {
 		this.knownResources.push(new Resource(this, x,y))
 	}
+
+	findClosestTo(x, y) {
+		let closesDistance = furthestDiagonalDistance;
+		let foundResource = null;
+		for (let i = 0; i < this.knownResources.length; i++) {
+			if (!this.knownResources[i].isAvailable) {
+				continue;
+			}
+			const currentDistance = this.knownResources[i].getDistanceTo(x, y);
+			if (currentDistance < closesDistance) {
+				foundResource = this.knownResources[i];
+				closesDistance = currentDistance;
+			}
+		}
+		return foundResource;
+	}
 }
 
 class Resource {
 	resources;
 	type = "wood";
 	qty = 1;
-	carriedBy = null;
+	#carriedBy = null;
 	floorLocation;
+	// e.g if a settler is walking to a piece of wood, nobody else can access it
+	reservedForAction = false;
 
 	constructor(resources, x,y) {
 		this.resources = resources;
 		this.setLocation(x,y)
 	}
 
+	get isAvailable() {
+		return this.reservedForAction == false;
+	}
+
+	set carriedBy(movable) {
+		if (movable == null) {
+			this.setLocation(this.#carriedBy.x, this.#carriedBy.y)
+			this.#carriedBy = null;
+		} else {
+			Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0);
+			this.#carriedBy = movable;
+		}
+	}
+
 	setLocation(x,y) {
 		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH), 1);
+		this.floorLocation = { x, y };
+	}
+
+
+	getDistanceTo(x, y) {
+		return getHeuristicCost(x, y, this.floorLocation.x, this.floorLocation.y)
 	}
 }
 
@@ -293,6 +372,14 @@ class Building {
 		this.y = y;
 
 		resourceRequests.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources))	
+	}
+
+	get entranceX() {
+		return this.x + buildingTypes[this.buildingIndex].entrance[0];
+	}
+
+	get entranceY() {
+		return this.y + buildingTypes[this.buildingIndex].entrance[1];
 	}
 }
 
@@ -337,11 +424,31 @@ class ResourceRequest {
 			//#endregion
 
 			//#region - if there are both resources and also idle villagers, assign the task to the villager
-			// let closestResource = resources.findClosestTo(this.source.x, this.source.y);
+			let closestResource = resources.findClosestTo(this.source.entranceX, this.source.entranceY);
+			console.log(closestResource);
 
-			// let closestVillager = movables.findClosestIdleTo(closestResource.x, closestResource.y)
-			
-			
+			let closestIdleVillager = movables.findClosestIdleTo(closestResource.floorLocation.x, closestResource.floorLocation.y)
+			console.log(closestIdleVillager);
+			//#endregion
+
+			//#region - generate quest for idle villager
+
+			closestResource.reservedForAction = true;
+			closestIdleVillager.quest = [
+				new Action(doAStar(closestIdleVillager.x, closestIdleVillager.y, closestResource.floorLocation.x, closestResource.floorLocation.y)),
+				new Action([closestResource.floorLocation.x, closestResource.floorLocation.y], ()=>{
+					closestResource.carriedBy = closestIdleVillager;
+					closestIdleVillager.heldResource = closestResource;
+				}),
+				new Action(doAStar(closestResource.floorLocation.x, closestResource.floorLocation.y, this.source.entranceX, this.source.entranceY)),
+				new Action([this.source.entranceX, this.source.entranceY], ()=>{
+					closestResource.carriedBy = null;
+					closestIdleVillager.heldResource = null;
+					closestResource.reservedForAction = false;
+				}),
+				// new Action([0, 0])
+			]
+			console.log(closestIdleVillager);
 			//#endregion
 
 
@@ -378,6 +485,147 @@ let buildings = new Buildings();
 let taskQueue = new TaskQueue(totalTicks);
 let resourceRequests = new ResourceRequests();
 
+// this is the distance diagonally NE/SW in which each diagonal cell isn't a single step away
+const furthestDiagonalDistance = MAP_WIDTH + MAP_HEIGHT ;
+
+function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targetY) {
+	console.log(`Doing A* towards ${targetX}, ${targetY}`);
+	const targetFlatIdx = helpers.get1DCoordinateFromXYCoordinate(targetX, targetY, MAP_WIDTH);
+	console.log(targetFlatIdx);
+
+	if (!cellIsWalkable(targetX, targetY, targetFlatIdx, collisionsMapMask)) {
+		// console.error(`Not able to walk to target`)
+		return null;
+	}
+
+	// const [currentMovablePositionX, currentMovablePositionY] = movable.currentLocationXY;
+
+	const startFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(currentMovablePositionX, currentMovablePositionY, MAP_WIDTH);
+
+	// in the 2015 code they had these permanently stored as 
+	// global variables shared for each A* for efficiency they're not creating/deleteing arrays all the time
+	// however they clear the bit masks every time the A* is performed
+	// "I have encountered this cell as a neighbour before"
+	const openBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
+	// "I have processed this cell and it's neighbours before"
+	const closedBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
+	
+	// in the 2015 code they have this assigned as a global variable, and it's only 
+	// ever read after being written to so it's okay not to even clear it between timed A* is performed
+	const open = new OpenBucketQueue();
+
+	let found = false;
+	// in the 2015 code they have this assigned as a global variable, and it's only 
+	// ever read after being written to so it's okay not to even clear it between timed A* is performed
+	// note that we technically don't need two variables stored in this array
+	// because the step between every path is always 1
+	// and the first parameter can be derived based on the second parameter
+	let depthParentHeap = new Array(MAP_WIDTH * MAP_HEIGHT * 2);
+	depthParentHeap[startFlatIdx * 2]     =  0; // num steps from start
+	depthParentHeap[startFlatIdx * 2 + 1] = -1; // previous cell was non-existant
+
+	// in the 2015 code they have this assigned as a global variable, and it's only 
+	// ever read after being written to so it's okay not to even clear it between timed A* is performed
+	// how many steps to get to this point
+	// note that these must be integers
+	let gCosts = new Array(MAP_WIDTH * MAP_HEIGHT);
+	// this should be redundant because the array should be initialised with all zeros
+	// but it can't hurt to be explicit
+	gCosts[startFlatIdx] = 0;
+
+	open.add(startFlatIdx, getHeuristicCost(currentMovablePositionX, currentMovablePositionY, targetX, targetY));
+	openBitSet[startFlatIdx] = 1;
+
+	while (open.totalCount > 0) {
+		let currentFlatIdx = open.removeMin();
+
+		const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
+		
+		
+		
+		closedBitSet[currentFlatIdx] = 1;
+
+		if (targetFlatIdx == currentFlatIdx) {
+			found = true;
+			break;
+		}
+
+		let currentPositionGCosts = gCosts[currentFlatIdx];
+
+		// could be optimised to a regular for loop?
+		for (const [key, value] of Object.entries(DIRECTIONS)) {
+			const neighbourX = x + value[0];
+			const neighbourY = y + value[1];
+			const neighbourFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(neighbourX, neighbourY, MAP_WIDTH);
+
+			if (!cellIsWalkable(neighbourX, neighbourY, neighbourFlatIdx, collisionsMapMask)) {
+				continue;
+			}
+
+			const newGCosts = currentPositionGCosts + 1;
+
+			// ideally could be re-written so that you've got an early exit in the case when newcosts is not larger than oldGCosts
+			// because the logic when you're updating values is mostly the same in both branches of this "if"
+			if (openBitSet[neighbourFlatIdx]) {
+				// we've already seen this cell so check if this is a shorter path to it
+				const oldGCosts = gCosts[neighbourFlatIdx];
+
+				if (newGCosts < oldGCosts) {
+					gCosts[neighbourFlatIdx] = newGCosts;
+					// current depth is 1 larger than previous cell
+					depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
+					// link to previous cell, saying "this is where I came from"
+					depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
+
+					// find distance between neighbour and target position
+					const heuristicCosts = getHeuristicCost(neighbourX, neighbourY, targetX, targetY);
+					open.updateCost(neighbourFlatIdx, oldGCosts + heuristicCosts, newGCosts + heuristicCosts)
+				}
+
+			} else {
+				// we haven't seen this cell already, so fill in its values as default
+				gCosts[neighbourFlatIdx] = newGCosts;
+				// current depth is 1 larger than previous cell
+				depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
+				// link to previous cell, saying "this is where I came from"
+				depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
+
+				openBitSet[neighbourFlatIdx] = 1;
+
+				// find distance between neighbour and target position
+				const heuristicCosts = getHeuristicCost(neighbourX, neighbourY, targetX, targetY);
+				open.add(neighbourFlatIdx, newGCosts + heuristicCosts)
+			}
+
+		}
+	}
+
+	if (found) {
+		const pathLength = depthParentHeap[targetFlatIdx * 2];
+		let path = [currentMovablePositionX, currentMovablePositionY];
+
+		let idx = pathLength;
+		let currentFlatIdx = targetFlatIdx;
+
+		while (idx > 0) {
+			const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
+			path[idx * 2] = x;
+			path[idx * 2 + 1] = y;
+			currentFlatIdx = depthParentHeap[currentFlatIdx * 2 + 1];
+			idx--;
+		}
+
+		// movable.quest = [new Action(path)]
+		return path; 
+	} 
+	console.error(`No path found`);
+	return null;
+
+}
+
+let movablePositions; 
+let gameState;
+let collisionsMapMask;
 
 self.onmessage = e => {
 	if (e.data.isNewTickTask) {
@@ -393,149 +641,16 @@ self.onmessage = e => {
 	
     const { movablePositionsSab, gameStateSab, collisionsMapMaskSab, drawableResourcesMapMaskSab } = e.data;
 
-    const movablePositions   = new Uint32Array(movablePositionsSab); 
-    const gameState = new Uint32Array(gameStateSab);
-    const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
+    movablePositions   = new Uint32Array(movablePositionsSab); 
+    gameState = new Uint32Array(gameStateSab);
+    collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
 	resources.drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
 
 	// create a dummy piece of wood for testing
-	resources.add(10,10);
+	resources.add(3,0);
 	resources.add(15,2);
-
-    function doAStar(movable, targetX, targetY) {
-        console.log(`Doing A* towards ${targetX}, ${targetY}`);
-        const targetFlatIdx = helpers.get1DCoordinateFromXYCoordinate(targetX, targetY, MAP_WIDTH);
-        console.log(targetFlatIdx);
-
-        if (!cellIsWalkable(targetX, targetY, targetFlatIdx, collisionsMapMask)) {
-            // console.error(`Not able to walk to target`)
-            return null;
-        }
-
-        const [currentMovablePositionX, currentMovablePositionY] = movable.currentLocationXY;
-
-        const startFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(currentMovablePositionX, currentMovablePositionY, MAP_WIDTH);
-
-        // in the 2015 code they had these permanently stored as 
-        // global variables shared for each A* for efficiency they're not creating/deleteing arrays all the time
-		// however they clear the bit masks every time the A* is performed
-        // "I have encountered this cell as a neighbour before"
-        const openBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
-        // "I have processed this cell and it's neighbours before"
-        const closedBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
-        
-		// in the 2015 code they have this assigned as a global variable, and it's only 
-		// ever read after being written to so it's okay not to even clear it between timed A* is performed
-        const open = new OpenBucketQueue();
-
-        let found = false;
-		// in the 2015 code they have this assigned as a global variable, and it's only 
-		// ever read after being written to so it's okay not to even clear it between timed A* is performed
-        // note that we technically don't need two variables stored in this array
-        // because the step between every path is always 1
-        // and the first parameter can be derived based on the second parameter
-        let depthParentHeap = new Array(MAP_WIDTH * MAP_HEIGHT * 2);
-        depthParentHeap[startFlatIdx * 2]     =  0; // num steps from start
-        depthParentHeap[startFlatIdx * 2 + 1] = -1; // previous cell was non-existant
-
-		// in the 2015 code they have this assigned as a global variable, and it's only 
-		// ever read after being written to so it's okay not to even clear it between timed A* is performed
-        // how many steps to get to this point
-        // note that these must be integers
-        let gCosts = new Array(MAP_WIDTH * MAP_HEIGHT);
-        // this should be redundant because the array should be initialised with all zeros
-        // but it can't hurt to be explicit
-        gCosts[startFlatIdx] = 0;
-
-        open.add(startFlatIdx, getHeuristicCost(currentMovablePositionX, currentMovablePositionY, targetX, targetY));
-        openBitSet[startFlatIdx] = 1;
-
-        while (open.totalCount > 0) {
-            let currentFlatIdx = open.removeMin();
-
-            const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
-            
-            
-            
-            closedBitSet[currentFlatIdx] = 1;
-
-            if (targetFlatIdx == currentFlatIdx) {
-                found = true;
-                break;
-            }
-
-            let currentPositionGCosts = gCosts[currentFlatIdx];
-
-            // could be optimised to a regular for loop?
-            for (const [key, value] of Object.entries(DIRECTIONS)) {
-                const neighbourX = x + value[0];
-                const neighbourY = y + value[1];
-                const neighbourFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(neighbourX, neighbourY, MAP_WIDTH);
-
-                if (!cellIsWalkable(neighbourX, neighbourY, neighbourFlatIdx, collisionsMapMask)) {
-                    continue;
-                }
-
-                const newGCosts = currentPositionGCosts + 1;
-
-                // ideally could be re-written so that you've got an early exit in the case when newcosts is not larger than oldGCosts
-                // because the logic when you're updating values is mostly the same in both branches of this "if"
-                if (openBitSet[neighbourFlatIdx]) {
-                    // we've already seen this cell so check if this is a shorter path to it
-                    const oldGCosts = gCosts[neighbourFlatIdx];
-
-                    if (newGCosts < oldGCosts) {
-                        gCosts[neighbourFlatIdx] = newGCosts;
-                        // current depth is 1 larger than previous cell
-                        depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
-                        // link to previous cell, saying "this is where I came from"
-                        depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
-
-                        // find distance between neighbour and target position
-                        const heuristicCosts = getHeuristicCost(neighbourX, neighbourY, targetX, targetY);
-                        open.updateCost(neighbourFlatIdx, oldGCosts + heuristicCosts, newGCosts + heuristicCosts)
-                    }
-
-                } else {
-                    // we haven't seen this cell already, so fill in its values as default
-                    gCosts[neighbourFlatIdx] = newGCosts;
-                    // current depth is 1 larger than previous cell
-                    depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
-                    // link to previous cell, saying "this is where I came from"
-                    depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
-
-                    openBitSet[neighbourFlatIdx] = 1;
-
-                    // find distance between neighbour and target position
-                    const heuristicCosts = getHeuristicCost(neighbourX, neighbourY, targetX, targetY);
-                    open.add(neighbourFlatIdx, newGCosts + heuristicCosts)
-                }
-
-            }
-        }
-
-        if (found) {
-            const pathLength = depthParentHeap[targetFlatIdx * 2];
-            let path = [currentMovablePositionX, currentMovablePositionY];
-
-            let idx = pathLength;
-            let currentFlatIdx = targetFlatIdx;
-
-            while (idx > 0) {
-                const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
-                path[idx * 2] = x;
-                path[idx * 2 + 1] = y;
-                currentFlatIdx = depthParentHeap[currentFlatIdx * 2 + 1];
-                idx--;
-            }
-
-            movable.quest = [new Action(path)]
-            return movable; 
-        } 
-        console.error(`No path found`);
-        return null;
-
-    }
+	resources.add(10,10);
+    resources.add(10,12);
     
     // let dummyVillager = new Movable([5,3,5,2,4,2,3,2,2,2,2,1]);
     // let dummyVillager2 = new Movable([10,1,9,1,8,1]);
@@ -551,9 +666,9 @@ self.onmessage = e => {
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
         for (let i = 0; i < movables.knownMovables.length; i++) {
             // share the current position with the render thread
-			let currentPosition = movables.knownMovables[i].currentLocationXY;
-            movablePositions[i*2] = currentPosition[0];
-            movablePositions[i*2+1] = currentPosition[1];
+			// let currentPosition = movables.knownMovables[i].currentLocationXY;
+            movablePositions[i*2] = movables.knownMovables[i].x;
+            movablePositions[i*2+1] = movables.knownMovables[i].y;
             
 			movables.knownMovables[i].incrementQuest();
         }
@@ -566,8 +681,8 @@ self.onmessage = e => {
 
     
 	movables.add(new Movable([new Action([0,0])]))
-    movables.add(new Movable([new Action([5,1, 4,1, 3,1, 2,1, 1,1])]));
-    movables.add(new Movable([new Action([5,2, 4,2, 3,2, 2,2, 1,2])]));
+    movables.add(new Movable([new Action([7,1, 6,1, 5,1, 4,1, 3,1, 2,1, 1,1])]));
+    movables.add(new Movable([new Action([7,2, 6,2, 5,2, 4,2, 3,2, 2,2, 1,2])]));
    
 
     //#region - add 20_000 people and have them wander randomly

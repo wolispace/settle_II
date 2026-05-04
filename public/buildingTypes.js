@@ -9,6 +9,7 @@ export const buildingTypes = [
                 [0, -4], 
                 [0, -5],
             ],
+		entrance: [0, 1],
 		constructionResources: 3
     },
     {
@@ -18,6 +19,7 @@ export const buildingTypes = [
                 [0, -1], [-1, -1], [1, -1],
                 [0, -2], [-1, -2], [1, -2],
             ],
+		entrance: [0, 1],
 		constructionResources: 1
     }
 ]

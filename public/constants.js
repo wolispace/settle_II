@@ -29,5 +29,5 @@ export const NUM_EXTRA_BITS = 1; // at the moment we're just storing an extra bi
 export const MAX_SCHEDULE_DURATION_MS = 32_000;
 export const TICK_PERIOD_MS = 250;
 
-export const MAP_WIDTH  = 20 // 2000;
-export const MAP_HEIGHT = 20 // 2000;
+export const MAP_WIDTH  = 100;
+export const MAP_HEIGHT = 100;

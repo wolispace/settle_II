@@ -46,7 +46,7 @@ self.onmessage = e => {
     const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
 
     for (let gridIdx = 0; gridIdx < terrainMapMask.length; gridIdx++) {
-        terrainMapMask[gridIdx] = Math.random() * 255;
+        terrainMapMask[gridIdx] = Math.random() * 10; //* 5 + 250;
     }
 
     const SQRT3_2 = 0.86602540378; 
@@ -102,7 +102,8 @@ self.onmessage = e => {
             ctx.lineTo(centerPixelX - leftLimit,      centerPixelY - topLimit - HEX_RADIUS);  // Top Point
             ctx.closePath();
 
-            ctx.fillStyle = `rgb(${terrainMapMask[gridIdx]},${terrainMapMask[gridIdx]},${terrainMapMask[gridIdx]})`;
+			ctx.fillStyle = `rgb(${152 - terrainMapMask[gridIdx]}, ${217 - terrainMapMask[gridIdx]}, ${134 - terrainMapMask[gridIdx]})`
+            // ctx.fillStyle = `rgb(${terrainMapMask[gridIdx]},${terrainMapMask[gridIdx]},${terrainMapMask[gridIdx]})`;
             ctx.fill();
 
             if (terrainCell.x === mouseXAsCell && terrainCell.y === mouseYAsCell) {
@@ -116,7 +117,7 @@ self.onmessage = e => {
                 const currentHighlight = buildingHighlightedCells[k];
                 // console.log(currentHighlight);
                 if (terrainCell.x === currentHighlight[0] && terrainCell.y === currentHighlight[1]) {
-                    ctx.fillStyle = `rgb(255,255,0,0.5)`;
+                    ctx.fillStyle = `rgb(255, 183, 0, 0.8)`;
                     ctx.fill();
                 }
             }
@@ -127,7 +128,7 @@ self.onmessage = e => {
                 //     console.log(gridIdx)
                 //     debug += 1;
                 // }
-                ctx.fillStyle = `rgb(0,255,0,0.5)`;
+                ctx.fillStyle = `rgb(77, 77, 77)`;
                 ctx.fill();
             }
 
@@ -178,7 +179,7 @@ self.onmessage = e => {
                 HEX_RADIUS, 
                 0, 
                 2 * Math.PI);
-            ctx.fillStyle = `yellow`;
+            ctx.fillStyle = `red`;
             ctx.fill();
         }
         //#endregion
