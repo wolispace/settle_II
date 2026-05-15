@@ -118,6 +118,11 @@ function init() {
     const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
     collisionsMapMask.fill(0);
 
+	const buildingsMapSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
+	const buildingsMap = new Uint32Array(buildingsMapSab);
+	buildingsMap.fill(0xFFFFFFFF);
+	// console.log(buildingsMap);
+
     const drawableResourcesMapMaskSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
 	const drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
 	drawableResourcesMapMask.fill(0);
@@ -126,7 +131,8 @@ function init() {
         movablePositionsSab,
         gameStateSab,
         collisionsMapMaskSab,
-		drawableResourcesMapMaskSab
+		drawableResourcesMapMaskSab,
+		buildingsMapSab
     });
 
     renderThread.postMessage({
@@ -136,6 +142,7 @@ function init() {
         terrainMapMaskSab,
         collisionsMapMaskSab,
 		drawableResourcesMapMaskSab,
+		buildingsMapSab,
         scale,
         widthVal  : window.innerWidth,
         heightVal : window.innerHeight,

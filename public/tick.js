@@ -10,35 +10,75 @@ import {
 import helpers from './helpers.js';
 import { buildingTypes } from './buildingTypes.js';
 
+const MOVE_ACTION = 1;
+const PICKUP_ACTION = 2;
+const DROPOFF_ACTION = 3;
+const BUILD_ACTION = 4;
+
+class AvailableTasks {
+	knownTasks = [[], [], []];
+
+	constructor() { }
+
+	add(villagerTask, priority) {
+		if (this.knownTasks[priority]) {
+			this.knownTasks[priority].push(villagerTask);
+			return true;
+		}
+		return false;
+	}
+
+	findHighestPriorityReady() {
+		for (let i = 0; i < this.knownTasks.length; i++) {
+			for (let j = 0; j < this.knownTasks[i].length; j++) {
+				if (this.knownTasks[i][j].canBeDone) {
+					return this.knownTasks[i].splice(j, 1)[0];
+				}
+			}
+		}
+		return null;
+	}
+}
+
+class VillagerTask {
+	constructor() {
+
+	}
+}
+
 // a quest is single step in a quest that a movable takes on
 class Action {
 	// each Action has a path, but that path might just be a single location
 	// e.g. the location of a building as it drops something off, or the location of a resource as it picks it up
-	#path;
+	#atomicActions;
+	// the index we're pointing at hasn't yet been executed, it's the next one to be executed
     // note that this is set before animating to that position so it might not look like we're there yet
-    indexOfCurrentLocation = 0;
-	uponFinished;
-	isFinishedCallback = false;
+    indexOfCurrentAtomicAction = 0;
+	// uponFinished;
+	// isFinishedCallback = false;
 
-	constructor(path, uponFinished = ()=>{}) {
-        this.#path = path;
-		this.uponFinished = uponFinished;
+	constructor(atomicActions) {
+        this.#atomicActions = atomicActions;
+		// this.uponFinished = uponFinished;
     }
 
-	get currentLocationXY() {
-		return [this.#path[this.indexOfCurrentLocation], this.#path[this.indexOfCurrentLocation + 1]];
-	}
+	
 
-    get path() {
-        return this.#path;
+	// get currentLocationXY() {
+	// 	return [this.#path[this.indexOfCurrentLocation], this.#path[this.indexOfCurrentLocation + 1]];
+	// }
+
+    get atomicActions() {
+        return this.#atomicActions;
     }
 
-	incrementPath() {
-		if (this.isFinishedMoving) {
-			return;
-		}
+	incrementAction() {
+		// if (this.isFinishedMoving) {
+		// 	return;
+		// }
+		this.atomicActions[this.indexOfCurrentAtomicAction].do();
 
-		this.indexOfCurrentLocation += 2;
+		this.indexOfCurrentAtomicAction += 1;
 	}
 
     // set path(path) {
@@ -47,8 +87,50 @@ class Action {
     //     this.indexOfCurrentLocation = 0;
     // }
 
-	get isFinishedMoving() {
-		return this.indexOfCurrentLocation + 2 >= this.#path.length;
+	get isFinished() {
+		return this.indexOfCurrentAtomicAction >= this.#atomicActions.length;
+	}
+}
+
+class AtomicAction {
+	actionType;
+	aaParams = [];
+
+	constructor(actionType, aaParams) {
+		this.actionType = actionType;
+		this.aaParams = aaParams;
+	}
+
+	do() {
+		switch (this.actionType) {
+			case MOVE_ACTION:
+				// [x, y, movable]
+				this.aaParams[2].x = this.aaParams[0];
+				this.aaParams[2].y = this.aaParams[1];
+				break;
+			case PICKUP_ACTION:
+				// [resource, movable]
+				this.aaParams[0].removeFromWorld();
+				console.log(resources);
+				// this.aaParams[0].carriedBy = this.aaParams[1];
+				this.aaParams[1].heldResource = 1;
+				break;
+			case DROPOFF_ACTION:
+				// [movable, building]
+				this.aaParams[0].heldResource = 0;
+				this.aaParams[1].addToConstructionResources();
+				break;
+			case BUILD_ACTION:
+				// [movable, building]
+				console.log("BUILDING");
+				this.aaParams[1].updateBuildAmount(this.aaParams[1].remainingBuildSteps - 1);
+				if (this.aaParams[1].remainingBuildSteps > 0) {
+					this.aaParams[0].quest[this.aaParams[0].indexOfCurrentQuestAction].indexOfCurrentAtomicAction--;
+				}
+				break;
+			default:
+				break;
+		}
 	}
 }
 
@@ -60,6 +142,15 @@ class Movables {
 
 	}
 
+	get hasIdle() {
+		for (let i = 0; i < this.knownMovables.length; i++) {
+			if (this.knownMovables[i].isIdle) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	add(movable) {
 		this.knownMovables.push(movable);
 	}
@@ -68,7 +159,7 @@ class Movables {
 		let closesDistance = furthestDiagonalDistance;
 		let foundIdle = null;
 		for (let i = 0; i < this.knownMovables.length; i++) {
-			if (!this.knownMovables[i].isIdle()) {
+			if (!this.knownMovables[i].isIdle) {
 				continue;
 			}
 			const currentDistance = this.knownMovables[i].getDistanceTo(x, y);
@@ -85,29 +176,41 @@ class Movable {
 
 	#quest = [];
 	indexOfCurrentQuestAction = 0;
-	heldResource = null;
+	heldResource = 0;
 
-    constructor(quest) {
-        this.#quest = quest;
+	x;
+	y;
+
+    constructor(x,y) {
+		this.x = x;
+		this.y = y;
+        // this.#quest = quest;
     }
 
 	// this maybe should be private, because you should be accessing the x and y getters individually
-	get currentLocationXY() {
-		// console.trace();
-		return this.#quest[this.indexOfCurrentQuestAction].currentLocationXY;
-	}
+	// get currentLocationXY() {
+	// 	// console.trace();
+	// 	return [this.x, this.y];
+	// }
 
-	get x() {
-		return this.currentLocationXY[0];
-	}
 
-	get y() {
-		return this.currentLocationXY[1];
-	}
+
+	// get x() {
+	// 	return this.currentLocationXY[0];
+	// }
+
+	// get y() {
+	// 	return this.currentLocationXY[1];
+	// }
 
     // get path() {
     //     return this.#path;
     // }
+
+	get quest() {
+		return this.#quest;
+	}
+
 
 	set quest(quest) {
 		this.#quest = quest;
@@ -128,30 +231,29 @@ class Movable {
 
 	incrementQuest() {
 		// if idle, don't move to the next step
-		if (this.isIdle()) {
+		if (this.isIdle) {
 			return;
 		} 
 
-		// if (this.x == 1 && this.y == 0) {
-		// 	console.log(this);
-		// }
-
-		if (this.#quest[this.indexOfCurrentQuestAction].isFinishedMoving) {
-			// console.log(`Doing uponFinished...`);
-			this.#quest[this.indexOfCurrentQuestAction].uponFinished();
-			this.#quest[this.indexOfCurrentQuestAction].isFinishedCallback = true;
-			// only increment the quest if there are more quests to increment to
-			if (this.indexOfCurrentQuestAction < this.#quest.length - 1) {
-				this.indexOfCurrentQuestAction+=1;
-			}
+		if (this.#quest[this.indexOfCurrentQuestAction].isFinished) {
+			this.indexOfCurrentQuestAction+=1;
 		} else {
 			// current action still has more steps then increment its path
-			this.#quest[this.indexOfCurrentQuestAction].incrementPath();
+			this.#quest[this.indexOfCurrentQuestAction].incrementAction();
+		}
+
+		// note that we do this in both cases because if the final action only has one atomic action
+		// then if we check it in the branch then it wouldn't be triggered
+		if (this.isIdle) {
+			doTaskMatchmake(taskQueue.getTickInFuture(1));
+			// tryFindingResourceMatch(null, null, this, taskQueue.getTickInFuture(1));
 		}
 	}
 
-	isIdle() {
-		return this.indexOfCurrentQuestAction + 1 >= this.#quest.length && this.#quest[this.indexOfCurrentQuestAction].isFinishedCallback;
+	get isIdle() {
+		// technically the the isFinished check is redundant, can't hurt to have it, 
+		// but really it's the indexOfCurrentQuestAction which will get into out of bounds territory when idle
+		return this.indexOfCurrentQuestAction + 1 >= this.#quest.length && this.#quest[this.indexOfCurrentQuestAction].isFinished;
 	}
 
 	getDistanceTo(x, y) {
@@ -171,6 +273,10 @@ class TaskQueue {
 
 	get currentTickTasks() {
 		return this.taskRingBuffer[this.taskPointer];
+	}
+
+	getTickInFuture(numTicksInFuture) {
+		return (numTicksInFuture + this.taskPointer) % this.totalTicks;
 	}
 
 	addTask(index, task) {
@@ -295,6 +401,18 @@ class Resources {
 		this.knownResources.push(new Resource(this, x,y))
 	}
 
+	remove(resourceToremove) {
+		console.log(resourceToremove);
+		for (let i = 0; i < this.knownResources.length; i++) {
+			if (this.knownResources[i].floorLocation.x == resourceToremove.floorLocation.x
+				&& this.knownResources[i].floorLocation.y == resourceToremove.floorLocation.y) {
+				this.knownResources.splice(i, 1);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	findClosestTo(x, y) {
 		let closesDistance = furthestDiagonalDistance;
 		let foundResource = null;
@@ -316,7 +434,7 @@ class Resource {
 	resources;
 	type = "wood";
 	qty = 1;
-	#carriedBy = null;
+	// #carriedBy = null;
 	floorLocation;
 	// e.g if a settler is walking to a piece of wood, nobody else can access it
 	reservedForAction = false;
@@ -330,15 +448,15 @@ class Resource {
 		return this.reservedForAction == false;
 	}
 
-	set carriedBy(movable) {
-		if (movable == null) {
-			this.setLocation(this.#carriedBy.x, this.#carriedBy.y)
-			this.#carriedBy = null;
-		} else {
-			Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0);
-			this.#carriedBy = movable;
-		}
-	}
+	// set carriedBy(movable) {
+	// 	if (movable == null) {
+	// 		this.setLocation(this.#carriedBy.x, this.#carriedBy.y)
+	// 		this.#carriedBy = null;
+	// 	} else {
+	// 		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0);
+	// 		this.#carriedBy = movable;
+	// 	}
+	// }
 
 	setLocation(x,y) {
 		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH), 1);
@@ -349,29 +467,47 @@ class Resource {
 	getDistanceTo(x, y) {
 		return getHeuristicCost(x, y, this.floorLocation.x, this.floorLocation.y)
 	}
+
+	removeFromWorld() {
+		this.qty--;
+		if (this.qty == 0) {
+			this.resources.remove(this);
+			Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0);
+		}
+	}
 }
 
 class Buildings {
 	knownBuildings = [];
+	newBuildingID = 0;
 
 	constructor() {}
 
 	add(buildingIndex, x, y) {
-		this.knownBuildings.push(new Building(buildingIndex, x, y))
+		this.knownBuildings.push(new Building(buildingIndex, x, y, this.newBuildingID))
+		this.newBuildingID++;
 	}
 }
 
 class Building {
 	buildingIndex;
+	#remainingBuildSteps;
 	x;
 	y;
+	id;
+	heldConstructionResources = 0;
 
-	constructor(buildingIndex, x, y) {	
+	constructor(buildingIndex, x, y, id) {	
 		this.buildingIndex = buildingIndex;
 		this.x = x;
 		this.y = y;
+		this.id = id;
 
-		resourceRequests.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources))	
+		this.updateBuildAmount(buildingTypes[this.buildingIndex].buildSteps);
+
+		// resourceRequests.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources))	
+		availableTasks.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources), 2)	
+		// availableTasks.add(new BuildTask(this), 2)	
 	}
 
 	get entranceX() {
@@ -381,117 +517,217 @@ class Building {
 	get entranceY() {
 		return this.y + buildingTypes[this.buildingIndex].entrance[1];
 	}
-}
 
-class ResourceRequests {
-	knownResourceRequests = [];
-
-	constructor() {
-
+	get remainingBuildSteps() {
+		return this.#remainingBuildSteps;
 	}
 
-	add(newResourceRequest) {
-		this.knownResourceRequests.push(newResourceRequest)
+	updateBuildAmount(newBuildSteps) {
+		this.#remainingBuildSteps = newBuildSteps;
+		const bbox = buildingTypes[this.buildingIndex].bbox; 
+
+		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[0][0], this.y + bbox[0][1], MAP_WIDTH), helpers.buildingToUint32(this, 0));
+		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[1][0], this.y + bbox[1][1], MAP_WIDTH), helpers.buildingToUint32(this, 1));
+		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[2][0], this.y + bbox[2][1], MAP_WIDTH), helpers.buildingToUint32(this, 2));
+		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[3][0], this.y + bbox[3][1], MAP_WIDTH), helpers.buildingToUint32(this, 3));
+	}
+	
+	addToConstructionResources() {
+		this.heldConstructionResources++
+		if (this.heldConstructionResources == buildingTypes[this.buildingIndex].constructionResources) {
+			availableTasks.add(new BuildRequest(this), 2);	
+			doTaskMatchmake(taskQueue.getTickInFuture(1));
+		}
 	}
 }
+
+// class ResourceRequests {
+// 	knownResourceRequests = [];
+
+// 	constructor() {
+
+// 	}
+
+// 	add(newResourceRequest) {
+// 		this.knownResourceRequests.push(newResourceRequest)
+// 	}
+
+// 	// findHighestPriority() {
+// 	// 	for (let i = 0; i < this.knownResourceRequests.length; i++) {
+// 	// 		if (this.knownResourceRequests[i].isAvailable) {
+// 	// 			return this.knownResourceRequests[i];
+// 	// 		}
+// 	// 	}
+// 	// 	return null;
+// 	// }
+// }
 
 class ResourceRequest {
 	source;
 	qty;
+	isTaken = false;
 
 	constructor(source, qty) {
 		this.source = source;
 		this.qty = qty;
 
-		taskQueue.addTask(taskQueue.taskPointer + 4, new Task((i)=>{
-			console.log(`find me ${this.qty} wood`)
+		// tryFindingResourceMatch(this, null, null, taskQueue.getTickInFuture(1));
+		doTaskMatchmake(taskQueue.getTickInFuture(1))
+	}
 
-			//#region - check if there are any resources, if not, do an early exit
-			if (resources.knownResources.length == 0) {
-				return;
-			}
-			//#endregion
+	get isAvailable() {
+		return !this.isTaken;
+	}
 
-			//#region - if there are resources, now check to see if there are any idle villager, if not do an early exit
-			// probably would be more optimal to be storing an array of idle villagers instead of doing this check on the fly
-			let foundIdleVillager = false;
-			for (let i = 0; i < movables.knownMovables.length; i++) {
-				if (movables.knownMovables[i].isIdle()) {
-					foundIdleVillager = true;
-					break;
-				}
-			}
-			//#endregion
+	// assume this never gets called unless there are idle villagers, so you're checking for everything else
+	get canBeDone() {
+		// this will need to be updated when there are more than one type of resource
+		return resources.knownResources.length > 0;
+	}
+}
 
-			//#region - if there are both resources and also idle villagers, assign the task to the villager
-			let closestResource = resources.findClosestTo(this.source.entranceX, this.source.entranceY);
-			console.log(closestResource);
+class BuildRequest {
+	source;
 
-			let closestIdleVillager = movables.findClosestIdleTo(closestResource.floorLocation.x, closestResource.floorLocation.y)
-			console.log(closestIdleVillager);
-			//#endregion
+	constructor(source) {
+		this.source = source;
+	}
 
-			//#region - generate quest for idle villager
-
-			closestResource.reservedForAction = true;
-			closestIdleVillager.quest = [
-				new Action(doAStar(closestIdleVillager.x, closestIdleVillager.y, closestResource.floorLocation.x, closestResource.floorLocation.y)),
-				new Action([closestResource.floorLocation.x, closestResource.floorLocation.y], ()=>{
-					closestResource.carriedBy = closestIdleVillager;
-					closestIdleVillager.heldResource = closestResource;
-				}),
-				new Action(doAStar(closestResource.floorLocation.x, closestResource.floorLocation.y, this.source.entranceX, this.source.entranceY)),
-				new Action([this.source.entranceX, this.source.entranceY], ()=>{
-					closestResource.carriedBy = null;
-					closestIdleVillager.heldResource = null;
-					closestResource.reservedForAction = false;
-				}),
-				// new Action([0, 0])
-			]
-			console.log(closestIdleVillager);
-			//#endregion
-
-
-			// while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
-			// 	// console.log("tick waiting for render to be ready");
-			// }
-	
-			// Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
-			// for (let i = 0; i < movables.length; i++) {
-			// 	// share the current position with the render thread
-			// 	movablePositions[i*2] = movables[i].path[movables[i].indexOfCurrentLocation];
-			// 	movablePositions[i*2+1] = movables[i].path[movables[i].indexOfCurrentLocation + 1];
-				
-			// 	// do you have anywhere left to go?
-			// 	if (movables[i].indexOfCurrentLocation + 2 >= movables[i].path.length) {
-			// 		continue;
-			// 	} 
-	
-			// 	// if you have anywhere left to go, go there
-			// 	movables[i].indexOfCurrentLocation+=2;
-			// }
-			// // atomic commands act as a memory fence around non-sequential commands (which are faster)
-			// Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
-		}));
+	canBeDone() {
+		return this.source.heldConstructionResources == buildingTypes[this.source.buildingIndex].constructionResources;
 	}
 }
 
 
 const totalTicks = MAX_SCHEDULE_DURATION_MS/TICK_PERIOD_MS;
 
+let taskQueue = new TaskQueue(totalTicks);
 let movables = new Movables()
 let resources = new Resources();
 let buildings = new Buildings();
-let taskQueue = new TaskQueue(totalTicks);
-let resourceRequests = new ResourceRequests();
+// let resourceRequests = new ResourceRequests();
+let availableTasks = new AvailableTasks();
 
 // this is the distance diagonally NE/SW in which each diagonal cell isn't a single step away
 const furthestDiagonalDistance = MAP_WIDTH + MAP_HEIGHT ;
 
+function doTaskMatchmake(tickToAssignTo) {
+	taskQueue.addTask(tickToAssignTo, new Task((i)=>{
+
+		if (!movables.hasIdle) {
+			return;
+		}
+		
+		// there is someone idle so find a task for them to do
+		const villagerTask = availableTasks.findHighestPriorityReady();
+		if (villagerTask == null) {
+			return;
+		}
+
+		if (villagerTask instanceof ResourceRequest) {
+			// request for resource = find closest villager/resource
+
+			const resource = resources.findClosestTo(villagerTask.source.entranceX, villagerTask.source.entranceY);
+			// this would be redundant if we had two separate arrays for knownResources and availableResources
+			if (resource == null) {
+				return;
+			}
+
+			const movable = movables.findClosestIdleTo(resource.floorLocation.x, resource.floorLocation.y)
+			// this would be redundant if we had two separate arrays for knownMovables and idleMovables
+			if (movable == null) {
+				return;
+			}
+
+			//#region - generate quest for idle villager
+
+			// note that we reseve the resource immediately because if we queue it in an action then 
+			// multiple people might try and claim it for themselves at a later time
+			resource.reservedForAction = true;
+			villagerTask.isTaken = true;
+			movable.quest = [
+				new Action(aStarMovable(movable.x, movable.y, resource.floorLocation.x, resource.floorLocation.y, movable)),
+				new Action([new AtomicAction(PICKUP_ACTION, [resource, movable])]),
+				new Action(aStarMovable(resource.floorLocation.x, resource.floorLocation.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
+				new Action([new AtomicAction(DROPOFF_ACTION, [movable, villagerTask.source])]),
+			]
+			//#endregion
+
+		} else if (villagerTask instanceof BuildRequest) {
+			// build = find cosest villager
+
+			const movable = movables.findClosestIdleTo(villagerTask.source.entranceX, villagerTask.source.entranceY)
+			// this would be redundant if we had two separate arrays for knownMovables and idleMovables
+			if (movable == null) {
+				return;
+			}
+
+			movable.quest = [
+				new Action(aStarMovable(movable.x, movable.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
+				new Action([new AtomicAction(BUILD_ACTION, [movable, villagerTask.source])]),
+			]
+		}
+
+
+		
+
+
+	}));
+}
+
+// function tryFindingResourceMatch(resourceRequest, resource, movable, tickToAssignTo) {
+// 	taskQueue.addTask(tickToAssignTo, new Task((i)=>{
+
+// 		if (resourceRequest == null) {
+// 			resourceRequest = resourceRequests.findHighestPriority();
+// 			// this would be redundant if we had two separate arrays for knownResourceRequests and availableResourceRequests
+// 			if (resourceRequest == null) {
+// 				return;
+// 			}
+// 		}
+
+// 		if (resource == null) {
+// 			resource = resources.findClosestTo(resourceRequest.source.entranceX, resourceRequest.source.entranceY);
+// 			// this would be redundant if we had two separate arrays for knownResources and availableResources
+// 			if (resource == null) {
+// 				return;
+// 			}
+// 		}
+
+// 		if (movable == null) {
+// 			movable = movables.findClosestIdleTo(resource.floorLocation.x, resource.floorLocation.y)
+// 			// this would be redundant if we had two separate arrays for knownMovables and idleMovables
+// 			if (movable == null) {
+// 				return;
+// 			}
+// 		}
+
+// 		//#region - generate quest for idle villager
+
+// 		// note that we reseve the resource immediately because if we queue it in an action then 
+// 		// multiple people might try and claim it for themselves at a later time
+// 		resource.reservedForAction = true;
+// 		resourceRequest.isTaken = true;
+// 		movable.quest = [
+// 			new Action(aStarMovable(movable.x, movable.y, resource.floorLocation.x, resource.floorLocation.y, movable)),
+// 			new Action([new AtomicAction(PICKUP_ACTION, [resource, movable])]),
+// 			new Action(aStarMovable(resource.floorLocation.x, resource.floorLocation.y, resourceRequest.source.entranceX, resourceRequest.source.entranceY, movable)),
+// 			new Action([new AtomicAction(DROPOFF_ACTION, [resource, movable])]),
+// 		]
+// 		//#endregion
+// 	}));
+// }
+
+function aStarMovable(initialX, initialY, targetX, targetY, movable) {
+	let atomicActions = doAStar(initialX, initialY, targetX, targetY);
+	for (let i = 0; i < atomicActions.length; i++) {
+		atomicActions[i].aaParams.push(movable);
+	}
+	return atomicActions;
+}
+
 function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targetY) {
-	console.log(`Doing A* towards ${targetX}, ${targetY}`);
 	const targetFlatIdx = helpers.get1DCoordinateFromXYCoordinate(targetX, targetY, MAP_WIDTH);
-	console.log(targetFlatIdx);
 
 	if (!cellIsWalkable(targetX, targetY, targetFlatIdx, collisionsMapMask)) {
 		// console.error(`Not able to walk to target`)
@@ -602,20 +838,20 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 
 	if (found) {
 		const pathLength = depthParentHeap[targetFlatIdx * 2];
-		let path = [currentMovablePositionX, currentMovablePositionY];
+		let path = [new AtomicAction(MOVE_ACTION, [currentMovablePositionX, currentMovablePositionY])];
 
 		let idx = pathLength;
 		let currentFlatIdx = targetFlatIdx;
 
 		while (idx > 0) {
 			const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
-			path[idx * 2] = x;
-			path[idx * 2 + 1] = y;
+			// path[idx * 2] = x;
+			// path[idx * 2 + 1] = y;
+			path[idx] = new AtomicAction(MOVE_ACTION, [x, y]);
 			currentFlatIdx = depthParentHeap[currentFlatIdx * 2 + 1];
 			idx--;
 		}
 
-		// movable.quest = [new Action(path)]
 		return path; 
 	} 
 	console.error(`No path found`);
@@ -626,25 +862,27 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 let movablePositions; 
 let gameState;
 let collisionsMapMask;
+let buildingsMap;
 
 self.onmessage = e => {
 	if (e.data.isNewTickTask) {
-		console.log(`>>>>`)
-		console.log(e.data.messageToUser)
+		// console.log(`>>>>`)
+		// console.log(e.data.messageToUser)
 		if (e.data.messageToUser.actionType == 'placeBuilding') {
 			buildings.add(e.data.messageToUser.currentBuildingIdx, e.data.messageToUser.x, e.data.messageToUser.y)
-			console.log(buildings);
+			// console.log(buildings);
 		}
 
 		return;
 	} 
 	
-    const { movablePositionsSab, gameStateSab, collisionsMapMaskSab, drawableResourcesMapMaskSab } = e.data;
+    const { movablePositionsSab, gameStateSab, collisionsMapMaskSab, drawableResourcesMapMaskSab, buildingsMapSab } = e.data;
 
     movablePositions   = new Uint32Array(movablePositionsSab); 
     gameState = new Uint32Array(gameStateSab);
     collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
 	resources.drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
+	buildingsMap = new Uint32Array(buildingsMapSab)
 
 	// create a dummy piece of wood for testing
 	resources.add(3,0);
@@ -659,30 +897,62 @@ self.onmessage = e => {
     const moveAllMovablesTask = new Task((i)=>{
         // console.log(`it's time to move all movables`)
 
+		// check if the movablePositions SAB is accessible
         while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
             // console.log("tick waiting for render to be ready");
         }
 
+		// lock the movablePositions SAB while working with it
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
+
         for (let i = 0; i < movables.knownMovables.length; i++) {
             // share the current position with the render thread
 			// let currentPosition = movables.knownMovables[i].currentLocationXY;
-            movablePositions[i*2] = movables.knownMovables[i].x;
-            movablePositions[i*2+1] = movables.knownMovables[i].y;
             
 			movables.knownMovables[i].incrementQuest();
+
+			// since each movable doesn't know where it sits in the movablePositions SAB, 
+			// we update that here instead of putting it inside of incrementQuest
+            movablePositions[i*2] = movables.knownMovables[i].x;
+            movablePositions[i*2+1] = movables.knownMovables[i].y;
         }
-        // atomic commands act as a memory fence around non-sequential commands (which are faster)
+
+        // unlock the movablePositions SAB now that we're done with it
         Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
-    }, 750);
+    }, 500);
 
 	taskQueue.addTask(0, moveAllMovablesTask);
         
 
-    
-	movables.add(new Movable([new Action([0,0])]))
-    movables.add(new Movable([new Action([7,1, 6,1, 5,1, 4,1, 3,1, 2,1, 1,1])]));
-    movables.add(new Movable([new Action([7,2, 6,2, 5,2, 4,2, 3,2, 2,2, 1,2])]));
+    let movableOne = new Movable(0,0);
+	movables.add(movableOne)
+	movableOne.quest = [new Action([
+		new AtomicAction(MOVE_ACTION, [0,0, movableOne])
+	])]
+	
+	let movableTwo = new Movable(7,1);
+	movables.add(movableTwo)
+	movableTwo.quest = [new Action([
+		new AtomicAction(MOVE_ACTION, [7,1, movableTwo]),
+		new AtomicAction(MOVE_ACTION, [6,1, movableTwo]),
+		new AtomicAction(MOVE_ACTION, [5,1, movableTwo]),
+		new AtomicAction(MOVE_ACTION, [4,1, movableTwo]),
+		new AtomicAction(MOVE_ACTION, [3,1, movableTwo]),
+		new AtomicAction(MOVE_ACTION, [2,1, movableTwo]),
+		new AtomicAction(MOVE_ACTION, [1,1, movableTwo])
+	])];
+
+	let movableThree = new Movable(7,2);
+	movables.add(movableThree)
+	movableThree.quest = [new Action([
+		new AtomicAction(MOVE_ACTION, [7,2, movableThree]),
+		new AtomicAction(MOVE_ACTION, [6,2, movableThree]),
+		new AtomicAction(MOVE_ACTION, [5,2, movableThree]),
+		new AtomicAction(MOVE_ACTION, [4,2, movableThree]),
+		new AtomicAction(MOVE_ACTION, [3,2, movableThree]),
+		new AtomicAction(MOVE_ACTION, [2,2, movableThree]),
+		new AtomicAction(MOVE_ACTION, [1,2, movableThree])
+	])];
    
 
     //#region - add 20_000 people and have them wander randomly

@@ -67,6 +67,24 @@ export default {
             return true;
         }
         return false;
-    }
+    },
+
+	buildingToUint32(building, cornerIndex) {
+		return (
+			((cornerIndex & 0b11) << 30) |                // 2 bits shifted by 30 (bits 30-31)
+			((building.buildingIndex & 0xFF) << 22) |     // 8 bits shifted by 22 (bits 22-29)
+			((building.remainingBuildSteps & 0xFF) << 14) | // 8 bits shifted by 14 (bits 14-21)
+			(building.id & 0x3FFF)                        // 14 bits at the bottom (bits 0-13)
+		) >>> 0; // Force unsigned 32-bit integer
+	}, 
+
+	uint32ToBuilding(n) {
+		return [
+			(n >>> 30) & 0b11,   // cornerIndex (2 bits)
+			(n >>> 22) & 0xFF,   // buildingIndex (8 bits)
+			(n >>> 14) & 0xFF,   // remainingBuildSteps (8 bits)
+			n & 0x3FFF           // id (14 bits)
+		];
+	}
 
 };

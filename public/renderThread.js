@@ -9,6 +9,17 @@ import {
 import helpers from './helpers.js';
 import { buildingTypes } from './buildingTypes.js';
 
+function drawHex(ctx, centerPixelX, leftLimit, hexWidth, centerPixelY, topLimit, hexHeight) {
+	ctx.beginPath();
+	ctx.moveTo(centerPixelX - leftLimit + hexWidth, centerPixelY - topLimit - hexHeight); // Top Right
+	ctx.lineTo(centerPixelX - leftLimit + hexWidth, centerPixelY - topLimit + hexHeight); // Bottom Right
+	ctx.lineTo(centerPixelX - leftLimit,      centerPixelY - topLimit + HEX_RADIUS);  // Bottom Point
+	ctx.lineTo(centerPixelX - leftLimit - hexWidth, centerPixelY - topLimit + hexHeight); // Bottom Left
+	ctx.lineTo(centerPixelX - leftLimit - hexWidth, centerPixelY - topLimit - hexHeight); // Top Left
+	ctx.lineTo(centerPixelX - leftLimit,      centerPixelY - topLimit - HEX_RADIUS);  // Top Point
+	ctx.closePath();
+}
+
 self.onmessage = e => {
     const { 
 		gameCanvasOffscreen, 
@@ -17,6 +28,7 @@ self.onmessage = e => {
 		terrainMapMaskSab, 
 		collisionsMapMaskSab, 
 		drawableResourcesMapMaskSab, 
+		buildingsMapSab,
 		scale, 
 		widthVal, 
 		heightVal 
@@ -25,6 +37,7 @@ self.onmessage = e => {
     const playStateArray = new Int32Array(playerStateSab); 
     const movablePositions = new Uint32Array(movablePositionsSab); 
 	const drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
+	const buildingsMap = new Uint32Array(buildingsMapSab)
 
     const ctx = gameCanvasOffscreen.getContext('2d');
     ctx.scale(scale, scale);
@@ -50,13 +63,17 @@ self.onmessage = e => {
     }
 
     const SQRT3_2 = 0.86602540378; 
-    const dx = HEX_RADIUS * SQRT3_2; // X-offset (half of the full width)
-    const dy = HEX_RADIUS * 0.5;     // Y-offset for the side points
+    const hexWidth = HEX_RADIUS * SQRT3_2; // X-offset (half of the full width)
+    const hexHeight = HEX_RADIUS * 0.5;     // Y-offset for the side points
 
     let debug = 0;
     // let loopcount = 0;
 
+	
+
     function step(timestamp) {
+
+		const buildingsSeenThisStep = new Set();
         // console.log(`---${loopcount}---`)
         // loopcount++
         // console.log(Atomics.load(playStateArray, 0));
@@ -84,29 +101,21 @@ self.onmessage = e => {
         
         for (let gridIdx = 0; gridIdx < terrainMapMask.length; gridIdx++) {
             
-            const terrainCell = helpers.getXYCoordinateFrom1DCoordinate(gridIdx, MAP_WIDTH);
+            const currentCellXY = helpers.getXYCoordinateFrom1DCoordinate(gridIdx, MAP_WIDTH);
 
-            const [centerPixelX, centerPixelY] = helpers.getPixelCenterFromCell(terrainCell.x, terrainCell.y, HEX_RADIUS);
+            const [centerPixelX, centerPixelY] = helpers.getPixelCenterFromCell(currentCellXY.x, currentCellXY.y, HEX_RADIUS);
             
             if (!helpers.isWithinRenderRegion(centerPixelX, centerPixelY, leftLimit, rightLimit, topLimit, bottomLimit)) {
                 continue;
             }
 
-            ctx.beginPath();
-            // We explicitly map out the 6 points clockwise, starting from Top-Right
-            ctx.moveTo(centerPixelX - leftLimit + dx, centerPixelY - topLimit - dy); // Top Right
-            ctx.lineTo(centerPixelX - leftLimit + dx, centerPixelY - topLimit + dy); // Bottom Right
-            ctx.lineTo(centerPixelX - leftLimit,      centerPixelY - topLimit + HEX_RADIUS);  // Bottom Point
-            ctx.lineTo(centerPixelX - leftLimit - dx, centerPixelY - topLimit + dy); // Bottom Left
-            ctx.lineTo(centerPixelX - leftLimit - dx, centerPixelY - topLimit - dy); // Top Left
-            ctx.lineTo(centerPixelX - leftLimit,      centerPixelY - topLimit - HEX_RADIUS);  // Top Point
-            ctx.closePath();
+            drawHex(ctx, centerPixelX, leftLimit, hexWidth, centerPixelY, topLimit, hexHeight)
 
 			ctx.fillStyle = `rgb(${152 - terrainMapMask[gridIdx]}, ${217 - terrainMapMask[gridIdx]}, ${134 - terrainMapMask[gridIdx]})`
             // ctx.fillStyle = `rgb(${terrainMapMask[gridIdx]},${terrainMapMask[gridIdx]},${terrainMapMask[gridIdx]})`;
             ctx.fill();
 
-            if (terrainCell.x === mouseXAsCell && terrainCell.y === mouseYAsCell) {
+            if (currentCellXY.x === mouseXAsCell && currentCellXY.y === mouseYAsCell) {
                 ctx.strokeStyle = 'red';
                 ctx.stroke();
 
@@ -116,7 +125,7 @@ self.onmessage = e => {
             for (let k = 0; k < buildingHighlightedCells.length; k++) {
                 const currentHighlight = buildingHighlightedCells[k];
                 // console.log(currentHighlight);
-                if (terrainCell.x === currentHighlight[0] && terrainCell.y === currentHighlight[1]) {
+                if (currentCellXY.x === currentHighlight[0] && currentCellXY.y === currentHighlight[1]) {
                     ctx.fillStyle = `rgb(255, 183, 0, 0.8)`;
                     ctx.fill();
                 }
@@ -142,9 +151,45 @@ self.onmessage = e => {
                 ctx.fill();
             }
             
+			
             
         }
         //#endregion
+
+		//#region - draw buildings using their corners
+		// note that we do this separate to the main loop, otherwise the terrain below the current cell overrides the drawing 
+		for (let gridIdx = 0; gridIdx < terrainMapMask.length; gridIdx++) {
+			const currentCellXY = helpers.getXYCoordinateFrom1DCoordinate(gridIdx, MAP_WIDTH);
+
+			const currentBuildingCell = Atomics.load(buildingsMap, gridIdx);
+			if (currentBuildingCell != 0xFFFFFFFF) {
+				// mask out the id
+				const currentBuildingID = currentBuildingCell & 0x00003FFF;
+				if (!buildingsSeenThisStep.has(currentBuildingID)) {
+					const [cornerIndex, buildingIndex, remainingBuildSteps, id] = helpers.uint32ToBuilding(currentBuildingCell);
+					const calculatedOpacity = (buildingTypes[buildingIndex].buildSteps - remainingBuildSteps) / buildingTypes[buildingIndex].buildSteps
+					
+					const [newCenterPixelX, newCenterPixelY] = helpers.getPixelCenterFromCell(
+						currentCellXY.x - buildingTypes[buildingIndex].bbox[cornerIndex][0], 
+						currentCellXY.y - buildingTypes[buildingIndex].bbox[cornerIndex][1], 
+						HEX_RADIUS
+					);
+					drawHex(ctx, newCenterPixelX, leftLimit, hexWidth, newCenterPixelY, topLimit, hexHeight)
+					
+					ctx.globalAlpha = calculatedOpacity;
+					if (buildingIndex == 0) {
+						ctx.fillStyle = `purple`;
+					} else {
+						ctx.fillStyle = `orange`;
+					}
+					
+					ctx.fill();
+					ctx.globalAlpha = 1;
+					buildingsSeenThisStep.add(currentBuildingID)
+				}
+			}
+		}
+		//#endregion
     
         //#region - draw movables
         while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
