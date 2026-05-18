@@ -13,7 +13,8 @@ export const buildingTypes = [
 		bbox: [[-1, -5], [1, -5], [-1, 0], [1,0]],
 		entrance: [0, 1],
 		constructionResources: 3,
-		buildSteps: 20
+		buildSteps: 20,
+		maxBuilders: 10
     },
     {
         name: 'sawmill',
@@ -25,6 +26,7 @@ export const buildingTypes = [
 		bbox: [[-1, -2], [1, -2], [-1, 0], [1,0]],
 		entrance: [0, 1],
 		constructionResources: 1,
-		buildSteps: 3
+		buildSteps: 3,
+		maxBuilders: 2
     }
 ]

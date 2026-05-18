@@ -23,7 +23,7 @@ class AvailableTasks {
 	add(villagerTask, priority) {
 		if (this.knownTasks[priority]) {
 			this.knownTasks[priority].push(villagerTask);
-			return true;
+			return villagerTask;
 		}
 		return false;
 	}
@@ -180,32 +180,15 @@ class Movable {
 
 	x;
 	y;
+	id;
 
-    constructor(x,y) {
+    constructor(x,y, id) {
 		this.x = x;
 		this.y = y;
-        // this.#quest = quest;
+		this.id = id;
     }
 
-	// this maybe should be private, because you should be accessing the x and y getters individually
-	// get currentLocationXY() {
-	// 	// console.trace();
-	// 	return [this.x, this.y];
-	// }
 
-
-
-	// get x() {
-	// 	return this.currentLocationXY[0];
-	// }
-
-	// get y() {
-	// 	return this.currentLocationXY[1];
-	// }
-
-    // get path() {
-    //     return this.#path;
-    // }
 
 	get quest() {
 		return this.#quest;
@@ -217,17 +200,10 @@ class Movable {
 		this.indexOfCurrentQuestAction = 0;
 	}
 
-    // set path(path) {
-    //     this.#path = path;
-    //     // this.path = new Int32Array(new ArrayBuffer(6 * 2));
-    //     this.indexOfCurrentLocation = 0;
-    // }
-
-	// maybe not needed if we're not testing the path planning any more
-    // get targetPosition() {
-    //     // this feels messy, could be updated to be more dynamic in case the path array structure changes
-    //     return [this.path[this.path.length - 2] , this.path[this.path.length - 1]];
-    // }
+    clearQuest() {
+		this.#quest = [];
+		this.indexOfCurrentQuestAction = 1;
+	}
 
 	incrementQuest() {
 		// if idle, don't move to the next step
@@ -235,11 +211,12 @@ class Movable {
 			return;
 		} 
 
-		if (this.#quest[this.indexOfCurrentQuestAction].isFinished) {
+		this.#quest[this.indexOfCurrentQuestAction].incrementAction();
+
+		// we use ?. here because in the process of incrementing the action, we may be deleting the current quest that the movable is working on 
+		// (e.g. building a building, and the building is done so the task gets cancelled)
+		if (this.#quest[this.indexOfCurrentQuestAction]?.isFinished) {
 			this.indexOfCurrentQuestAction+=1;
-		} else {
-			// current action still has more steps then increment its path
-			this.#quest[this.indexOfCurrentQuestAction].incrementAction();
 		}
 
 		// note that we do this in both cases because if the final action only has one atomic action
@@ -253,7 +230,7 @@ class Movable {
 	get isIdle() {
 		// technically the the isFinished check is redundant, can't hurt to have it, 
 		// but really it's the indexOfCurrentQuestAction which will get into out of bounds territory when idle
-		return this.indexOfCurrentQuestAction + 1 >= this.#quest.length && this.#quest[this.indexOfCurrentQuestAction].isFinished;
+		return this.indexOfCurrentQuestAction >= this.#quest.length //&& this.#quest[this.indexOfCurrentQuestAction].isFinished;
 	}
 
 	getDistanceTo(x, y) {
@@ -496,6 +473,7 @@ class Building {
 	y;
 	id;
 	heldConstructionResources = 0;
+	associatedTasks = [];
 
 	constructor(buildingIndex, x, y, id) {	
 		this.buildingIndex = buildingIndex;
@@ -505,11 +483,9 @@ class Building {
 
 		this.updateBuildAmount(buildingTypes[this.buildingIndex].buildSteps);
 
-		// resourceRequests.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources))	
 		for (let i = 0; i < buildingTypes[this.buildingIndex].constructionResources; i++) {
-			availableTasks.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources), 2)	
+			this.addAssociatedTask(availableTasks.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources), 2));	
 		}
-		// availableTasks.add(new BuildTask(this), 2)	
 	}
 
 	get entranceX() {
@@ -524,6 +500,22 @@ class Building {
 		return this.#remainingBuildSteps;
 	}
 
+	// we may want the ability to cancel some types of tasks in the future, but not clear when we would want to do this so not implementing right now
+	cancelAllTasks() {
+		for (let i = 0; i < this.associatedTasks.length; i++) {
+			if (this.associatedTasks[i].assignedTo) {
+				this.associatedTasks[i].cancel();
+			}
+		}
+		this.associatedTasks = [];
+	}
+	
+	addAssociatedTask(potentialTask) {
+		if (potentialTask) {
+			this.associatedTasks.push(potentialTask);
+		}
+	}
+
 	updateBuildAmount(newBuildSteps) {
 		this.#remainingBuildSteps = newBuildSteps;
 		const bbox = buildingTypes[this.buildingIndex].bbox; 
@@ -532,13 +524,19 @@ class Building {
 		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[1][0], this.y + bbox[1][1], MAP_WIDTH), helpers.buildingToUint32(this, 1));
 		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[2][0], this.y + bbox[2][1], MAP_WIDTH), helpers.buildingToUint32(this, 2));
 		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[3][0], this.y + bbox[3][1], MAP_WIDTH), helpers.buildingToUint32(this, 3));
+
+		if (this.#remainingBuildSteps == 0) {
+			this.cancelAllTasks();
+		}
 	}
 	
 	addToConstructionResources() {
 		this.heldConstructionResources++
 		if (this.heldConstructionResources == buildingTypes[this.buildingIndex].constructionResources) {
-			availableTasks.add(new BuildRequest(this), 2);	
-			doTaskMatchmake(taskQueue.getTickInFuture(1));
+			for (let i = 0; i < buildingTypes[this.buildingIndex].maxBuilders; i++) {
+				this.addAssociatedTask(availableTasks.add(new BuildRequest(this), 2));	
+				doTaskMatchmake(taskQueue.getTickInFuture(1));
+			}
 		}
 	}
 }
@@ -567,7 +565,8 @@ class Building {
 class ResourceRequest {
 	source;
 	qty;
-	isTaken = false;
+	// isTaken = false;
+	assignedTo;
 
 	constructor(source, qty) {
 		this.source = source;
@@ -577,26 +576,35 @@ class ResourceRequest {
 		doTaskMatchmake(taskQueue.getTickInFuture(1))
 	}
 
-	get isAvailable() {
-		return !this.isTaken;
-	}
+	// get isAvailable() {
+	// 	return !this.isTaken;
+	// }
 
 	// assume this never gets called unless there are idle villagers, so you're checking for everything else
 	get canBeDone() {
 		// this will need to be updated when there are more than one type of resource
 		return resources.knownResources.length > 0;
 	}
+
+	cancel() {
+		this.assignedTo.clearQuest();
+	}
 }
 
 class BuildRequest {
 	source;
+	assignedTo;
 
 	constructor(source) {
 		this.source = source;
 	}
 
-	canBeDone() {
+	get canBeDone() {
 		return this.source.heldConstructionResources == buildingTypes[this.source.buildingIndex].constructionResources;
+	}
+
+	cancel() {
+		this.assignedTo.clearQuest();
 	}
 }
 
@@ -615,6 +623,8 @@ const furthestDiagonalDistance = MAP_WIDTH + MAP_HEIGHT ;
 
 function doTaskMatchmake(tickToAssignTo) {
 	taskQueue.addTask(tickToAssignTo, new Task((i)=>{
+		console.log("MATCHMAKING");
+		console.log(JSON.stringify(availableTasks.knownTasks[2].length));
 
 		if (!movables.hasIdle) {
 			return;
@@ -641,12 +651,14 @@ function doTaskMatchmake(tickToAssignTo) {
 				return;
 			}
 
+			villagerTask.assignedTo = movable;
+
 			//#region - generate quest for idle villager
 
 			// note that we reseve the resource immediately because if we queue it in an action then 
 			// multiple people might try and claim it for themselves at a later time
 			resource.reservedForAction = true;
-			villagerTask.isTaken = true;
+			// villagerTask.isTaken = true;
 			movable.quest = [
 				new Action(aStarMovable(movable.x, movable.y, resource.floorLocation.x, resource.floorLocation.y, movable)),
 				new Action([new AtomicAction(PICKUP_ACTION, [resource, movable])]),
@@ -664,13 +676,15 @@ function doTaskMatchmake(tickToAssignTo) {
 				return;
 			}
 
+			villagerTask.assignedTo = movable;
+
 			movable.quest = [
 				new Action(aStarMovable(movable.x, movable.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
 				new Action([new AtomicAction(BUILD_ACTION, [movable, villagerTask.source])]),
 			]
 		}
 
-
+		
 		
 
 
@@ -926,13 +940,13 @@ self.onmessage = e => {
 	taskQueue.addTask(0, moveAllMovablesTask);
         
 
-    let movableOne = new Movable(0,0);
+    let movableOne = new Movable(0,0, 1);
 	movables.add(movableOne)
 	movableOne.quest = [new Action([
 		new AtomicAction(MOVE_ACTION, [0,0, movableOne])
 	])]
 	
-	let movableTwo = new Movable(7,1);
+	let movableTwo = new Movable(7,1, 2);
 	movables.add(movableTwo)
 	movableTwo.quest = [new Action([
 		new AtomicAction(MOVE_ACTION, [7,1, movableTwo]),
@@ -944,7 +958,7 @@ self.onmessage = e => {
 		new AtomicAction(MOVE_ACTION, [1,1, movableTwo])
 	])];
 
-	let movableThree = new Movable(7,2);
+	let movableThree = new Movable(7,2, 3);
 	movables.add(movableThree)
 	movableThree.quest = [new Action([
 		new AtomicAction(MOVE_ACTION, [7,2, movableThree]),
