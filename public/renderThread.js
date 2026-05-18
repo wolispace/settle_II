@@ -178,7 +178,7 @@ self.onmessage = e => {
 					
 					ctx.globalAlpha = calculatedOpacity;
 					if (buildingIndex == 0) {
-						ctx.fillStyle = `purple`;
+						ctx.fillStyle = `white`;
 					} else {
 						ctx.fillStyle = `orange`;
 					}

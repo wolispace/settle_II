@@ -63,7 +63,7 @@ export default {
             || x >= mapWidth
             || y < 0
             || y >= mapHeight) {
-            console.error(`Target is out of bounds`)
+            // console.error(`Target is out of bounds`)
             return true;
         }
         return false;

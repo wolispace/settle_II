@@ -506,7 +506,9 @@ class Building {
 		this.updateBuildAmount(buildingTypes[this.buildingIndex].buildSteps);
 
 		// resourceRequests.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources))	
-		availableTasks.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources), 2)	
+		for (let i = 0; i < buildingTypes[this.buildingIndex].constructionResources; i++) {
+			availableTasks.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources), 2)	
+		}
 		// availableTasks.add(new BuildTask(this), 2)	
 	}
 
