@@ -17,12 +17,14 @@ const BUILD_ACTION = 4;
 
 class AvailableTasks {
 	knownTasks = [[], [], []];
+  latestAddedID = 0;
 
 	constructor() { }
 
 	add(villagerTask, priority) {
 		if (this.knownTasks[priority]) {
 			this.knownTasks[priority].push(villagerTask);
+      villagerTask.setID(this.latestAddedID++);
 			return villagerTask;
 		}
 		return false;
@@ -38,6 +40,16 @@ class AvailableTasks {
 		}
 		return null;
 	}
+
+  cancelTask(task) {
+    for (let i = 0; i < this.knownTasks.length; i++) {
+      for (let j = 0; j < this.knownTasks[i].length; j++) {
+				if (this.knownTasks[i][j].id == task.id) {
+					return this.knownTasks[i].splice(j, 1)[0];
+				}
+			}
+		}
+  }
 }
 
 class VillagerTask {
@@ -181,8 +193,9 @@ class Movable {
 	x;
 	y;
 	id;
+  task;
 
-    constructor(x,y, id) {
+  constructor(x,y, id) {
 		this.x = x;
 		this.y = y;
 		this.id = id;
@@ -200,7 +213,7 @@ class Movable {
 		this.indexOfCurrentQuestAction = 0;
 	}
 
-    clearQuest() {
+  clearQuest() {
 		this.#quest = [];
 		this.indexOfCurrentQuestAction = 1;
 	}
@@ -222,6 +235,7 @@ class Movable {
 		// note that we do this in both cases because if the final action only has one atomic action
 		// then if we check it in the branch then it wouldn't be triggered
 		if (this.isIdle) {
+      this.task?.cancel();
 			doTaskMatchmake(taskQueue.getTickInFuture(1));
 			// tryFindingResourceMatch(null, null, this, taskQueue.getTickInFuture(1));
 		}
@@ -502,10 +516,10 @@ class Building {
 
 	// we may want the ability to cancel some types of tasks in the future, but not clear when we would want to do this so not implementing right now
 	cancelAllTasks() {
-		for (let i = 0; i < this.associatedTasks.length; i++) {
-			if (this.associatedTasks[i].assignedTo) {
+		for (let i = this.associatedTasks.length - 1; i >= 0; i--) {
+			// if (this.associatedTasks[i].assignedTo) {
 				this.associatedTasks[i].cancel();
-			}
+			// }
 		}
 		this.associatedTasks = [];
 	}
@@ -539,6 +553,14 @@ class Building {
 			}
 		}
 	}
+
+  cancelTask(task) {
+    for (let j = 0; j < this.associatedTasks.length; j++) {
+      if (this.associatedTasks[j].id == task.id) {
+        return this.associatedTasks.splice(j, 1)[0];
+      }
+    }
+  }
 }
 
 // class ResourceRequests {
@@ -567,6 +589,7 @@ class ResourceRequest {
 	qty;
 	// isTaken = false;
 	assignedTo;
+  id;
 
 	constructor(source, qty) {
 		this.source = source;
@@ -580,6 +603,10 @@ class ResourceRequest {
 	// 	return !this.isTaken;
 	// }
 
+  setID(id) {
+    this.id = id
+  }
+
 	// assume this never gets called unless there are idle villagers, so you're checking for everything else
 	get canBeDone() {
 		// this will need to be updated when there are more than one type of resource
@@ -587,7 +614,12 @@ class ResourceRequest {
 	}
 
 	cancel() {
-		this.assignedTo.clearQuest();
+    this.source.cancelTask(this);
+    availableTasks.cancelTask(this);
+    if (this.assignedTo) {
+      // this.assignedTo.task = undefined;
+      this.assignedTo.clearQuest();
+    }
 	}
 }
 
@@ -599,12 +631,21 @@ class BuildRequest {
 		this.source = source;
 	}
 
+  setID(id) {
+    this.id = id
+  }
+
 	get canBeDone() {
 		return this.source.heldConstructionResources == buildingTypes[this.source.buildingIndex].constructionResources;
 	}
 
 	cancel() {
-		this.assignedTo.clearQuest();
+    this.source.cancelTask(this);
+    availableTasks.cancelTask(this);
+		if (this.assignedTo) {
+      this.assignedTo.task = undefined;
+      this.assignedTo.clearQuest();
+    }
 	}
 }
 
@@ -625,6 +666,9 @@ function doTaskMatchmake(tickToAssignTo) {
 	taskQueue.addTask(tickToAssignTo, new Task((i)=>{
 		console.log("MATCHMAKING");
 		console.log(JSON.stringify(availableTasks.knownTasks[2].length));
+    if (movables.knownMovables[2].isIdle) {
+      console.log("ready to work")
+    }
 
 		if (!movables.hasIdle) {
 			return;
@@ -659,6 +703,7 @@ function doTaskMatchmake(tickToAssignTo) {
 			// multiple people might try and claim it for themselves at a later time
 			resource.reservedForAction = true;
 			// villagerTask.isTaken = true;
+      movable.task = villagerTask;
 			movable.quest = [
 				new Action(aStarMovable(movable.x, movable.y, resource.floorLocation.x, resource.floorLocation.y, movable)),
 				new Action([new AtomicAction(PICKUP_ACTION, [resource, movable])]),
@@ -677,7 +722,7 @@ function doTaskMatchmake(tickToAssignTo) {
 			}
 
 			villagerTask.assignedTo = movable;
-
+      movable.task = villagerTask;
 			movable.quest = [
 				new Action(aStarMovable(movable.x, movable.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
 				new Action([new AtomicAction(BUILD_ACTION, [movable, villagerTask.source])]),
@@ -942,33 +987,33 @@ self.onmessage = e => {
 
     let movableOne = new Movable(0,0, 1);
 	movables.add(movableOne)
-	movableOne.quest = [new Action([
-		new AtomicAction(MOVE_ACTION, [0,0, movableOne])
-	])]
+	// movableOne.quest = [new Action([
+	// 	new AtomicAction(MOVE_ACTION, [0,0, movableOne])
+	// ])]
 	
 	let movableTwo = new Movable(7,1, 2);
 	movables.add(movableTwo)
-	movableTwo.quest = [new Action([
-		new AtomicAction(MOVE_ACTION, [7,1, movableTwo]),
-		new AtomicAction(MOVE_ACTION, [6,1, movableTwo]),
-		new AtomicAction(MOVE_ACTION, [5,1, movableTwo]),
-		new AtomicAction(MOVE_ACTION, [4,1, movableTwo]),
-		new AtomicAction(MOVE_ACTION, [3,1, movableTwo]),
-		new AtomicAction(MOVE_ACTION, [2,1, movableTwo]),
-		new AtomicAction(MOVE_ACTION, [1,1, movableTwo])
-	])];
+	// movableTwo.quest = [new Action([
+	// 	new AtomicAction(MOVE_ACTION, [7,1, movableTwo]),
+	// 	new AtomicAction(MOVE_ACTION, [6,1, movableTwo]),
+	// 	new AtomicAction(MOVE_ACTION, [5,1, movableTwo]),
+	// 	new AtomicAction(MOVE_ACTION, [4,1, movableTwo]),
+	// 	new AtomicAction(MOVE_ACTION, [3,1, movableTwo]),
+	// 	new AtomicAction(MOVE_ACTION, [2,1, movableTwo]),
+	// 	new AtomicAction(MOVE_ACTION, [1,1, movableTwo])
+	// ])];
 
 	let movableThree = new Movable(7,2, 3);
 	movables.add(movableThree)
-	movableThree.quest = [new Action([
-		new AtomicAction(MOVE_ACTION, [7,2, movableThree]),
-		new AtomicAction(MOVE_ACTION, [6,2, movableThree]),
-		new AtomicAction(MOVE_ACTION, [5,2, movableThree]),
-		new AtomicAction(MOVE_ACTION, [4,2, movableThree]),
-		new AtomicAction(MOVE_ACTION, [3,2, movableThree]),
-		new AtomicAction(MOVE_ACTION, [2,2, movableThree]),
-		new AtomicAction(MOVE_ACTION, [1,2, movableThree])
-	])];
+	// movableThree.quest = [new Action([
+	// 	new AtomicAction(MOVE_ACTION, [7,2, movableThree]),
+	// 	new AtomicAction(MOVE_ACTION, [6,2, movableThree]),
+	// 	new AtomicAction(MOVE_ACTION, [5,2, movableThree]),
+	// 	new AtomicAction(MOVE_ACTION, [4,2, movableThree]),
+	// 	new AtomicAction(MOVE_ACTION, [3,2, movableThree]),
+	// 	new AtomicAction(MOVE_ACTION, [2,2, movableThree]),
+	// 	new AtomicAction(MOVE_ACTION, [1,2, movableThree])
+	// ])];
    
 
     //#region - add 20_000 people and have them wander randomly
