@@ -85,6 +85,20 @@ export default {
 			(n >>> 14) & 0xFF,   // remainingBuildSteps (8 bits)
 			n & 0x3FFF           // id (14 bits)
 		];
+	},
+
+	resourceToUint32(resource) {
+		const qty = resource.qty & 0b111;               // 3 bits
+		const resourceId = (resource.resourceId & 0x1FFFFFFF) << 3; // 29 bits shifted left 3
+		return (resourceId | qty) >>> 0; // Force unsigned 32-bit
+	},
+
+	uint32ToResource(n) {
+		return [ 
+			(n >>> 3) & 0x1FFFFFFF, 
+			n & 0b111 
+		];
 	}
+
 
 };

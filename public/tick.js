@@ -1,13 +1,14 @@
-import { 
-    MAX_MOVABLES,
-    NUM_EXTRA_BITS,
-    MAX_SCHEDULE_DURATION_MS,
-    TICK_PERIOD_MS,
-    MAP_WIDTH,
-    MAP_HEIGHT,
-    DIRECTIONS
+import {
+	MAX_MOVABLES,
+	NUM_EXTRA_BITS,
+	MAX_SCHEDULE_DURATION_MS,
+	TICK_PERIOD_MS,
+	MAP_WIDTH,
+	MAP_HEIGHT,
+	DIRECTIONS
 } from './constants.js';
 import helpers from './helpers.js';
+import { resourceTypes } from './resourceTypes.js';
 import { buildingTypes } from './buildingTypes.js';
 
 const MOVE_ACTION = 1;
@@ -17,14 +18,14 @@ const BUILD_ACTION = 4;
 
 class AvailableTasks {
 	knownTasks = [[], [], []];
-  latestAddedID = 0;
+	latestAddedID = 0;
 
 	constructor() { }
 
 	add(villagerTask, priority) {
 		if (this.knownTasks[priority]) {
 			this.knownTasks[priority].push(villagerTask);
-      villagerTask.setID(this.latestAddedID++);
+			villagerTask.setID(this.latestAddedID++);
 			return villagerTask;
 		}
 		return false;
@@ -41,15 +42,15 @@ class AvailableTasks {
 		return null;
 	}
 
-  cancelTask(task) {
-    for (let i = 0; i < this.knownTasks.length; i++) {
-      for (let j = 0; j < this.knownTasks[i].length; j++) {
+	cancelTask(task) {
+		for (let i = 0; i < this.knownTasks.length; i++) {
+			for (let j = 0; j < this.knownTasks[i].length; j++) {
 				if (this.knownTasks[i][j].id == task.id) {
 					return this.knownTasks[i].splice(j, 1)[0];
 				}
 			}
 		}
-  }
+	}
 }
 
 class VillagerTask {
@@ -64,25 +65,25 @@ class Action {
 	// e.g. the location of a building as it drops something off, or the location of a resource as it picks it up
 	#atomicActions;
 	// the index we're pointing at hasn't yet been executed, it's the next one to be executed
-    // note that this is set before animating to that position so it might not look like we're there yet
-    indexOfCurrentAtomicAction = 0;
+	// note that this is set before animating to that position so it might not look like we're there yet
+	indexOfCurrentAtomicAction = 0;
 	// uponFinished;
 	// isFinishedCallback = false;
 
 	constructor(atomicActions) {
-        this.#atomicActions = atomicActions;
+		this.#atomicActions = atomicActions;
 		// this.uponFinished = uponFinished;
-    }
+	}
 
-	
+
 
 	// get currentLocationXY() {
 	// 	return [this.#path[this.indexOfCurrentLocation], this.#path[this.indexOfCurrentLocation + 1]];
 	// }
 
-    get atomicActions() {
-        return this.#atomicActions;
-    }
+	get atomicActions() {
+		return this.#atomicActions;
+	}
 
 	incrementAction() {
 		// if (this.isFinishedMoving) {
@@ -93,11 +94,11 @@ class Action {
 		this.indexOfCurrentAtomicAction += 1;
 	}
 
-    // set path(path) {
-    //     this.#path = path;
-    //     // this.path = new Int32Array(new ArrayBuffer(6 * 2));
-    //     this.indexOfCurrentLocation = 0;
-    // }
+	// set path(path) {
+	//     this.#path = path;
+	//     // this.path = new Int32Array(new ArrayBuffer(6 * 2));
+	//     this.indexOfCurrentLocation = 0;
+	// }
 
 	get isFinished() {
 		return this.indexOfCurrentAtomicAction >= this.#atomicActions.length;
@@ -128,9 +129,9 @@ class AtomicAction {
 				this.aaParams[1].heldResource = 1;
 				break;
 			case DROPOFF_ACTION:
-				// [movable, building]
+				// [movable, building, resource]
 				this.aaParams[0].heldResource = 0;
-				this.aaParams[1].addToConstructionResources();
+				this.aaParams[1].addToConstructionResources(this.aaParams[2].resourceId);
 				break;
 			case BUILD_ACTION:
 				// [movable, building]
@@ -193,13 +194,13 @@ class Movable {
 	x;
 	y;
 	id;
-  task;
+	task;
 
-  constructor(x,y, id) {
+	constructor(x, y, id) {
 		this.x = x;
 		this.y = y;
 		this.id = id;
-    }
+	}
 
 
 
@@ -213,30 +214,31 @@ class Movable {
 		this.indexOfCurrentQuestAction = 0;
 	}
 
-  clearQuest() {
+	clearQuest() {
 		this.#quest = [];
 		this.indexOfCurrentQuestAction = 1;
+		doTaskMatchmake(taskQueue.getTickInFuture(1));
 	}
 
 	incrementQuest() {
 		// if idle, don't move to the next step
 		if (this.isIdle) {
 			return;
-		} 
+		}
 
 		this.#quest[this.indexOfCurrentQuestAction].incrementAction();
 
 		// we use ?. here because in the process of incrementing the action, we may be deleting the current quest that the movable is working on 
 		// (e.g. building a building, and the building is done so the task gets cancelled)
 		if (this.#quest[this.indexOfCurrentQuestAction]?.isFinished) {
-			this.indexOfCurrentQuestAction+=1;
+			this.indexOfCurrentQuestAction += 1;
 		}
 
 		// note that we do this in both cases because if the final action only has one atomic action
 		// then if we check it in the branch then it wouldn't be triggered
 		if (this.isIdle) {
-      this.task?.cancel();
-			doTaskMatchmake(taskQueue.getTickInFuture(1));
+			this.task?.cancel();
+			// doTaskMatchmake(taskQueue.getTickInFuture(1));
 			// tryFindingResourceMatch(null, null, this, taskQueue.getTickInFuture(1));
 		}
 	}
@@ -279,106 +281,106 @@ class TaskQueue {
 
 	doCurrentTasks() {
 		for (let i = 0; i < this.currentTickTasks?.length; i++) {
-            this.currentTickTasks[i].todo();
+			this.currentTickTasks[i].todo();
 
-            if (this.currentTickTasks[i].rescheduleDurationInTicks) {
-                const nextPointerPosition = (this.taskPointer + this.currentTickTasks[i].rescheduleDurationInTicks) % this.totalTicks;
+			if (this.currentTickTasks[i].rescheduleDurationInTicks) {
+				const nextPointerPosition = (this.taskPointer + this.currentTickTasks[i].rescheduleDurationInTicks) % this.totalTicks;
 				this.addTask(nextPointerPosition, this.currentTickTasks[i]);
-            }
-        }
+			}
+		}
 
 		this.taskRingBuffer[this.taskPointer] = [];
-        this.taskPointer = (this.taskPointer+1) % this.totalTicks;
+		this.taskPointer = (this.taskPointer + 1) % this.totalTicks;
 	}
 }
 
 class Task {
-    todo;
-    rescheduleDurationInTicks;
-    
-    constructor(todo, rescheduleDurationInMs) {
-        this.todo = todo;
-        if (rescheduleDurationInMs >= MAX_SCHEDULE_DURATION_MS) {
-            throw new Error(`Can't add a rescheduleDurationInMs (${rescheduleDurationInMs}) longer than ${MAX_SCHEDULE_DURATION_MS}`);   
-        }
-        this.rescheduleDurationInTicks = rescheduleDurationInMs/TICK_PERIOD_MS;
-    }
+	todo;
+	rescheduleDurationInTicks;
+
+	constructor(todo, rescheduleDurationInMs) {
+		this.todo = todo;
+		if (rescheduleDurationInMs >= MAX_SCHEDULE_DURATION_MS) {
+			throw new Error(`Can't add a rescheduleDurationInMs (${rescheduleDurationInMs}) longer than ${MAX_SCHEDULE_DURATION_MS}`);
+		}
+		this.rescheduleDurationInTicks = rescheduleDurationInMs / TICK_PERIOD_MS;
+	}
 }
 
 class OpenBucketQueue {
-    // must be a power of 2
-    numBuckets = 4;
-    buckets = [];
-    bucketIdx = 0;
-    totalCount = 0;
+	// must be a power of 2
+	numBuckets = 4;
+	buckets = [];
+	bucketIdx = 0;
+	totalCount = 0;
 
-    constructor() {
-        this.buckets = new Array(this.numBuckets);
-        for (let i = 0; i < this.numBuckets; i++) {
-            this.buckets[i] = [];
-        }
-    }
+	constructor() {
+		this.buckets = new Array(this.numBuckets);
+		for (let i = 0; i < this.numBuckets; i++) {
+			this.buckets[i] = [];
+		}
+	}
 
-    add(val1D, cost) {
-        // bitwise AND with minus 1 of a value is the same as modulo as long as numBuckets is a power of 2
-        const thisIndex = cost & (this.numBuckets - 1);
-        this.buckets[thisIndex].push(val1D);
-        this.totalCount++;
-    }
+	add(val1D, cost) {
+		// bitwise AND with minus 1 of a value is the same as modulo as long as numBuckets is a power of 2
+		const thisIndex = cost & (this.numBuckets - 1);
+		this.buckets[thisIndex].push(val1D);
+		this.totalCount++;
+	}
 
-    removeMin() {
-        if (this.totalCount < 1) {
-            throw new Error("Can't removeMin from an empty OpenBucketQueue");
-        }
-        while (!(this.buckets[this.bucketIdx].length > 0)) {
-            // bitwise AND with minus 1 of a value is the same as modulo as long as numBuckets is a power of 2
-            this.bucketIdx = (this.bucketIdx + 1) & (this.numBuckets - 1);
-        }
-        this.totalCount--;
-        return this.buckets[this.bucketIdx].shift();
-    }
+	removeMin() {
+		if (this.totalCount < 1) {
+			throw new Error("Can't removeMin from an empty OpenBucketQueue");
+		}
+		while (!(this.buckets[this.bucketIdx].length > 0)) {
+			// bitwise AND with minus 1 of a value is the same as modulo as long as numBuckets is a power of 2
+			this.bucketIdx = (this.bucketIdx + 1) & (this.numBuckets - 1);
+		}
+		this.totalCount--;
+		return this.buckets[this.bucketIdx].shift();
+	}
 
-    updateCost(val1D, oldFCost, newFCost) {
-        const oldBucket = this.buckets[oldFCost & (this.numBuckets - 1)];
-        const newBucket = this.buckets[newFCost & (this.numBuckets - 1)];
-        for (let i = 0; i < oldBucket.length; i++) {
-            if (oldBucket[i] == val1D) {
-                oldBucket.splice(i, 1);
-                break;
-            }
-        }
-        newBucket.push(val1D);
+	updateCost(val1D, oldFCost, newFCost) {
+		const oldBucket = this.buckets[oldFCost & (this.numBuckets - 1)];
+		const newBucket = this.buckets[newFCost & (this.numBuckets - 1)];
+		for (let i = 0; i < oldBucket.length; i++) {
+			if (oldBucket[i] == val1D) {
+				oldBucket.splice(i, 1);
+				break;
+			}
+		}
+		newBucket.push(val1D);
 
-    }
+	}
 }
 
 // note that this must always return an integer in order to be valid
 function getHeuristicCost(sx, sy, tx, ty) {
-    const dx = tx - sx;
-    const dy = ty - sy;
-    const dz = -dx - dy;  // the implicit third axis
-    // "How many steps do I need? Well, I have three debts to pay and each 
-    // step pays two of them. The answer is whichever debt is largest — 
-    // the other two will get paid off along the way."
-    return Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+	const dx = tx - sx;
+	const dy = ty - sy;
+	const dz = -dx - dy;  // the implicit third axis
+	// "How many steps do I need? Well, I have three debts to pay and each 
+	// step pays two of them. The answer is whichever debt is largest — 
+	// the other two will get paid off along the way."
+	return Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
 }
 
 function cellIsWalkable(targetX, targetY, targetFlatIdx, collisionsMapMask) {
-    if (helpers.xyCellOutOfBounds(targetX, targetY, MAP_WIDTH, MAP_HEIGHT)) {
-        // console.error(`Target is out of bounds`)
-        return false;
-    }
-    
-    // check if target is reachable
-    if (collisionsMapMask[targetFlatIdx] > 0) {
-        // console.error(`Collision, can't walk into a collision`)
-        return false;
-    }  
+	if (helpers.xyCellOutOfBounds(targetX, targetY, MAP_WIDTH, MAP_HEIGHT)) {
+		// console.error(`Target is out of bounds`)
+		return false;
+	}
+
+	// check if target is reachable
+	if (collisionsMapMask[targetFlatIdx] > 0) {
+		// console.error(`Collision, can't walk into a collision`)
+		return false;
+	}
 
 	//#region - check if the target is in the same region/landmass as the movable
 	//#endregion
 
-    return true;
+	return true;
 }
 
 
@@ -388,8 +390,8 @@ class Resources {
 
 	constructor() { }
 
-	add(x,y) {
-		this.knownResources.push(new Resource(this, x,y))
+	add(resourceId, x, y) {
+		this.knownResources.push(new Resource(this, resourceId, x, y))
 	}
 
 	remove(resourceToremove) {
@@ -404,10 +406,13 @@ class Resources {
 		return false;
 	}
 
-	findClosestTo(x, y) {
+	findClosestTo(x, y, resourceId) {
 		let closesDistance = furthestDiagonalDistance;
 		let foundResource = null;
 		for (let i = 0; i < this.knownResources.length; i++) {
+			if (this.knownResources[i].resourceId != resourceId) {
+				continue;
+			}
 			if (!this.knownResources[i].isAvailable) {
 				continue;
 			}
@@ -423,16 +428,17 @@ class Resources {
 
 class Resource {
 	resources;
-	type = "wood";
+	resourceId;
 	qty = 1;
 	// #carriedBy = null;
 	floorLocation;
 	// e.g if a settler is walking to a piece of wood, nobody else can access it
 	reservedForAction = false;
 
-	constructor(resources, x,y) {
+	constructor(resources, resourceId, x, y) {
 		this.resources = resources;
-		this.setLocation(x,y)
+		this.resourceId = resourceId;
+		this.setLocation(x, y)
 	}
 
 	get isAvailable() {
@@ -449,8 +455,8 @@ class Resource {
 	// 	}
 	// }
 
-	setLocation(x,y) {
-		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH), 1);
+	setLocation(x, y) {
+		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH), helpers.resourceToUint32(this));
 		this.floorLocation = { x, y };
 	}
 
@@ -463,7 +469,7 @@ class Resource {
 		this.qty--;
 		if (this.qty == 0) {
 			this.resources.remove(this);
-			Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0);
+			Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0xFFFFFFFF);
 		}
 	}
 }
@@ -472,7 +478,7 @@ class Buildings {
 	knownBuildings = [];
 	newBuildingID = 0;
 
-	constructor() {}
+	constructor() { }
 
 	add(buildingIndex, x, y) {
 		this.knownBuildings.push(new Building(buildingIndex, x, y, this.newBuildingID))
@@ -486,10 +492,10 @@ class Building {
 	x;
 	y;
 	id;
-	heldConstructionResources = 0;
+	heldConstructionResources = {};
 	associatedTasks = [];
 
-	constructor(buildingIndex, x, y, id) {	
+	constructor(buildingIndex, x, y, id) {
 		this.buildingIndex = buildingIndex;
 		this.x = x;
 		this.y = y;
@@ -497,8 +503,10 @@ class Building {
 
 		this.updateBuildAmount(buildingTypes[this.buildingIndex].buildSteps);
 
-		for (let i = 0; i < buildingTypes[this.buildingIndex].constructionResources; i++) {
-			this.addAssociatedTask(availableTasks.add(new ResourceRequest(this, buildingTypes[this.buildingIndex].constructionResources), 2));	
+		for (const [resourceId, resourceQty] of Object.entries(buildingTypes[this.buildingIndex].constructionResources)) {
+			for (let i = 0; i < resourceQty; i++) {
+				this.addAssociatedTask(availableTasks.add(new ResourceRequest(this, resourceId), 2));
+			}
 		}
 	}
 
@@ -518,12 +526,12 @@ class Building {
 	cancelAllTasks() {
 		for (let i = this.associatedTasks.length - 1; i >= 0; i--) {
 			// if (this.associatedTasks[i].assignedTo) {
-				this.associatedTasks[i].cancel();
+			this.associatedTasks[i].cancel();
 			// }
 		}
 		this.associatedTasks = [];
 	}
-	
+
 	addAssociatedTask(potentialTask) {
 		if (potentialTask) {
 			this.associatedTasks.push(potentialTask);
@@ -532,7 +540,7 @@ class Building {
 
 	updateBuildAmount(newBuildSteps) {
 		this.#remainingBuildSteps = newBuildSteps;
-		const bbox = buildingTypes[this.buildingIndex].bbox; 
+		const bbox = buildingTypes[this.buildingIndex].bbox;
 
 		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[0][0], this.y + bbox[0][1], MAP_WIDTH), helpers.buildingToUint32(this, 0));
 		Atomics.store(buildingsMap, helpers.get1DCoordinateFromXYCoordinate(this.x + bbox[1][0], this.y + bbox[1][1], MAP_WIDTH), helpers.buildingToUint32(this, 1));
@@ -543,24 +551,41 @@ class Building {
 			this.cancelAllTasks();
 		}
 	}
-	
-	addToConstructionResources() {
-		this.heldConstructionResources++
-		if (this.heldConstructionResources == buildingTypes[this.buildingIndex].constructionResources) {
+
+	canBeBuilt() {
+		for (const [resourceId, resourceQty] of Object.entries(buildingTypes[this.buildingIndex].constructionResources)) {
+			if (!this.heldConstructionResources.hasOwnProperty(resourceId) || 
+				this.heldConstructionResources[resourceId] != resourceQty) {
+				return false;
+			}
+		}
+		return true;
+		// return this.heldConstructionResources == buildingTypes[this.buildingIndex].constructionResources
+	}
+
+	addToConstructionResources(resourceId) {
+		if (!this.heldConstructionResources.hasOwnProperty(resourceId)) {
+			this.heldConstructionResources[resourceId] = 1;
+		} else {
+			this.heldConstructionResources[resourceId] += 1;
+		}
+		// if the building now has all the resource it needs
+		if (this.canBeBuilt()) {
+			// put a call out for builders to build it
 			for (let i = 0; i < buildingTypes[this.buildingIndex].maxBuilders; i++) {
-				this.addAssociatedTask(availableTasks.add(new BuildRequest(this), 2));	
+				this.addAssociatedTask(availableTasks.add(new BuildRequest(this), 2));
 				doTaskMatchmake(taskQueue.getTickInFuture(1));
 			}
 		}
 	}
 
-  cancelTask(task) {
-    for (let j = 0; j < this.associatedTasks.length; j++) {
-      if (this.associatedTasks[j].id == task.id) {
-        return this.associatedTasks.splice(j, 1)[0];
-      }
-    }
-  }
+	cancelTask(task) {
+		for (let j = 0; j < this.associatedTasks.length; j++) {
+			if (this.associatedTasks[j].id == task.id) {
+				return this.associatedTasks.splice(j, 1)[0];
+			}
+		}
+	}
 }
 
 // class ResourceRequests {
@@ -586,14 +611,14 @@ class Building {
 
 class ResourceRequest {
 	source;
-	qty;
+	resourceId;
 	// isTaken = false;
 	assignedTo;
-  id;
+	id;
 
-	constructor(source, qty) {
+	constructor(source, resourceId) {
 		this.source = source;
-		this.qty = qty;
+		this.resourceId = resourceId;
 
 		// tryFindingResourceMatch(this, null, null, taskQueue.getTickInFuture(1));
 		doTaskMatchmake(taskQueue.getTickInFuture(1))
@@ -603,9 +628,9 @@ class ResourceRequest {
 	// 	return !this.isTaken;
 	// }
 
-  setID(id) {
-    this.id = id
-  }
+	setID(id) {
+		this.id = id
+	}
 
 	// assume this never gets called unless there are idle villagers, so you're checking for everything else
 	get canBeDone() {
@@ -614,12 +639,15 @@ class ResourceRequest {
 	}
 
 	cancel() {
-    this.source.cancelTask(this);
-    availableTasks.cancelTask(this);
-    if (this.assignedTo) {
-      // this.assignedTo.task = undefined;
-      this.assignedTo.clearQuest();
-    }
+		this.source.cancelTask(this);
+		if (this.assignedTo) {
+			// remove from person it was assigned to
+			this.assignedTo.task = undefined;
+			this.assignedTo.clearQuest();
+		} else {
+			// remove from backlog of tasks
+			availableTasks.cancelTask(this);
+		}
 	}
 }
 
@@ -631,26 +659,29 @@ class BuildRequest {
 		this.source = source;
 	}
 
-  setID(id) {
-    this.id = id
-  }
+	setID(id) {
+		this.id = id
+	}
 
 	get canBeDone() {
-		return this.source.heldConstructionResources == buildingTypes[this.source.buildingIndex].constructionResources;
+		return this.source.canBeBuilt();
 	}
 
 	cancel() {
-    this.source.cancelTask(this);
-    availableTasks.cancelTask(this);
+		this.source.cancelTask(this);
 		if (this.assignedTo) {
-      this.assignedTo.task = undefined;
-      this.assignedTo.clearQuest();
-    }
+			// remove from person it was assigned to
+			this.assignedTo.task = undefined;
+			this.assignedTo.clearQuest();
+		} else {
+			// remove from backlog of tasks
+			availableTasks.cancelTask(this);
+		}
 	}
 }
 
 
-const totalTicks = MAX_SCHEDULE_DURATION_MS/TICK_PERIOD_MS;
+const totalTicks = MAX_SCHEDULE_DURATION_MS / TICK_PERIOD_MS;
 
 let taskQueue = new TaskQueue(totalTicks);
 let movables = new Movables()
@@ -660,20 +691,18 @@ let buildings = new Buildings();
 let availableTasks = new AvailableTasks();
 
 // this is the distance diagonally NE/SW in which each diagonal cell isn't a single step away
-const furthestDiagonalDistance = MAP_WIDTH + MAP_HEIGHT ;
+const furthestDiagonalDistance = MAP_WIDTH + MAP_HEIGHT;
 
 function doTaskMatchmake(tickToAssignTo) {
-	taskQueue.addTask(tickToAssignTo, new Task((i)=>{
-		console.log("MATCHMAKING");
-		console.log(JSON.stringify(availableTasks.knownTasks[2].length));
-    if (movables.knownMovables[2].isIdle) {
-      console.log("ready to work")
-    }
+	taskQueue.addTask(tickToAssignTo, new Task((i) => {
+		// console.log("MATCHMAKING");
+		// console.log(JSON.stringify(availableTasks.knownTasks[2].length));
+
 
 		if (!movables.hasIdle) {
 			return;
 		}
-		
+
 		// there is someone idle so find a task for them to do
 		const villagerTask = availableTasks.findHighestPriorityReady();
 		if (villagerTask == null) {
@@ -683,7 +712,7 @@ function doTaskMatchmake(tickToAssignTo) {
 		if (villagerTask instanceof ResourceRequest) {
 			// request for resource = find closest villager/resource
 
-			const resource = resources.findClosestTo(villagerTask.source.entranceX, villagerTask.source.entranceY);
+			const resource = resources.findClosestTo(villagerTask.source.entranceX, villagerTask.source.entranceY, villagerTask.resourceId);
 			// this would be redundant if we had two separate arrays for knownResources and availableResources
 			if (resource == null) {
 				return;
@@ -703,12 +732,12 @@ function doTaskMatchmake(tickToAssignTo) {
 			// multiple people might try and claim it for themselves at a later time
 			resource.reservedForAction = true;
 			// villagerTask.isTaken = true;
-      movable.task = villagerTask;
+			movable.task = villagerTask;
 			movable.quest = [
 				new Action(aStarMovable(movable.x, movable.y, resource.floorLocation.x, resource.floorLocation.y, movable)),
 				new Action([new AtomicAction(PICKUP_ACTION, [resource, movable])]),
 				new Action(aStarMovable(resource.floorLocation.x, resource.floorLocation.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
-				new Action([new AtomicAction(DROPOFF_ACTION, [movable, villagerTask.source])]),
+				new Action([new AtomicAction(DROPOFF_ACTION, [movable, villagerTask.source, resource])]),
 			]
 			//#endregion
 
@@ -722,15 +751,15 @@ function doTaskMatchmake(tickToAssignTo) {
 			}
 
 			villagerTask.assignedTo = movable;
-      movable.task = villagerTask;
+			movable.task = villagerTask;
 			movable.quest = [
 				new Action(aStarMovable(movable.x, movable.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
 				new Action([new AtomicAction(BUILD_ACTION, [movable, villagerTask.source])]),
 			]
 		}
 
-		
-		
+
+
 
 
 	}));
@@ -797,7 +826,7 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 
 	// const [currentMovablePositionX, currentMovablePositionY] = movable.currentLocationXY;
 
-	const startFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(currentMovablePositionX, currentMovablePositionY, MAP_WIDTH);
+	const startFlatIdx = helpers.get1DCoordinateFromXYCoordinate(currentMovablePositionX, currentMovablePositionY, MAP_WIDTH);
 
 	// in the 2015 code they had these permanently stored as 
 	// global variables shared for each A* for efficiency they're not creating/deleteing arrays all the time
@@ -806,7 +835,7 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 	const openBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
 	// "I have processed this cell and it's neighbours before"
 	const closedBitSet = new Array(MAP_WIDTH * MAP_HEIGHT);
-	
+
 	// in the 2015 code they have this assigned as a global variable, and it's only 
 	// ever read after being written to so it's okay not to even clear it between timed A* is performed
 	const open = new OpenBucketQueue();
@@ -818,7 +847,7 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 	// because the step between every path is always 1
 	// and the first parameter can be derived based on the second parameter
 	let depthParentHeap = new Array(MAP_WIDTH * MAP_HEIGHT * 2);
-	depthParentHeap[startFlatIdx * 2]     =  0; // num steps from start
+	depthParentHeap[startFlatIdx * 2] = 0; // num steps from start
 	depthParentHeap[startFlatIdx * 2 + 1] = -1; // previous cell was non-existant
 
 	// in the 2015 code they have this assigned as a global variable, and it's only 
@@ -836,10 +865,10 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 	while (open.totalCount > 0) {
 		let currentFlatIdx = open.removeMin();
 
-		const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
-		
-		
-		
+		const { x, y } = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
+
+
+
 		closedBitSet[currentFlatIdx] = 1;
 
 		if (targetFlatIdx == currentFlatIdx) {
@@ -853,7 +882,7 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 		for (const [key, value] of Object.entries(DIRECTIONS)) {
 			const neighbourX = x + value[0];
 			const neighbourY = y + value[1];
-			const neighbourFlatIdx =  helpers.get1DCoordinateFromXYCoordinate(neighbourX, neighbourY, MAP_WIDTH);
+			const neighbourFlatIdx = helpers.get1DCoordinateFromXYCoordinate(neighbourX, neighbourY, MAP_WIDTH);
 
 			if (!cellIsWalkable(neighbourX, neighbourY, neighbourFlatIdx, collisionsMapMask)) {
 				continue;
@@ -870,7 +899,7 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 				if (newGCosts < oldGCosts) {
 					gCosts[neighbourFlatIdx] = newGCosts;
 					// current depth is 1 larger than previous cell
-					depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
+					depthParentHeap[neighbourFlatIdx * 2] = depthParentHeap[currentFlatIdx * 2] + 1;
 					// link to previous cell, saying "this is where I came from"
 					depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
 
@@ -883,7 +912,7 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 				// we haven't seen this cell already, so fill in its values as default
 				gCosts[neighbourFlatIdx] = newGCosts;
 				// current depth is 1 larger than previous cell
-				depthParentHeap[neighbourFlatIdx * 2    ] = depthParentHeap[currentFlatIdx * 2] + 1;
+				depthParentHeap[neighbourFlatIdx * 2] = depthParentHeap[currentFlatIdx * 2] + 1;
 				// link to previous cell, saying "this is where I came from"
 				depthParentHeap[neighbourFlatIdx * 2 + 1] = currentFlatIdx;
 
@@ -905,7 +934,7 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 		let currentFlatIdx = targetFlatIdx;
 
 		while (idx > 0) {
-			const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
+			const { x, y } = helpers.getXYCoordinateFrom1DCoordinate(currentFlatIdx, MAP_WIDTH);
 			// path[idx * 2] = x;
 			// path[idx * 2 + 1] = y;
 			path[idx] = new AtomicAction(MOVE_ACTION, [x, y]);
@@ -913,14 +942,14 @@ function doAStar(currentMovablePositionX, currentMovablePositionY, targetX, targ
 			idx--;
 		}
 
-		return path; 
-	} 
+		return path;
+	}
 	console.error(`No path found`);
 	return null;
 
 }
 
-let movablePositions; 
+let movablePositions;
 let gameState;
 let collisionsMapMask;
 let buildingsMap;
@@ -935,63 +964,71 @@ self.onmessage = e => {
 		}
 
 		return;
-	} 
-	
-    const { movablePositionsSab, gameStateSab, collisionsMapMaskSab, drawableResourcesMapMaskSab, buildingsMapSab } = e.data;
+	}
 
-    movablePositions   = new Uint32Array(movablePositionsSab); 
-    gameState = new Uint32Array(gameStateSab);
-    collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
+	const { movablePositionsSab, gameStateSab, collisionsMapMaskSab, drawableResourcesMapMaskSab, buildingsMapSab } = e.data;
+
+	movablePositions = new Uint32Array(movablePositionsSab);
+	gameState = new Uint32Array(gameStateSab);
+	collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
 	resources.drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
 	buildingsMap = new Uint32Array(buildingsMapSab)
 
 	// create a dummy piece of wood for testing
-	resources.add(3,0);
-	resources.add(15,2);
-	resources.add(10,10);
-    resources.add(10,12);
-    
-    // let dummyVillager = new Movable([5,3,5,2,4,2,3,2,2,2,2,1]);
-    // let dummyVillager2 = new Movable([10,1,9,1,8,1]);
-    // let movables = [dummyVillager2, dummyVillager];
+	resources.add(0, 3, 0);
+	resources.add(0, 10, 10);
+	resources.add(0, 10, 12);
+	resources.add(0, 11, 0);
+	resources.add(0, 12, 1);
+	resources.add(0, 13, 2);
+	resources.add(0, 15, 2);
+	resources.add(1, 3, 4);
+	resources.add(1, 2, 5);
+	resources.add(1, 1, 6);
+	resources.add(1, 3, 10);
+	resources.add(1, 4, 11);
 
-    const moveAllMovablesTask = new Task((i)=>{
-        // console.log(`it's time to move all movables`)
+	// let dummyVillager = new Movable([5,3,5,2,4,2,3,2,2,2,2,1]);
+	// let dummyVillager2 = new Movable([10,1,9,1,8,1]);
+	// let movables = [dummyVillager2, dummyVillager];
+
+	const moveAllMovablesTask = new Task((i) => {
+		// console.log(`it's time to move all movables`)
 
 		// check if the movablePositions SAB is accessible
-        while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
-            // console.log("tick waiting for render to be ready");
-        }
+		while (Atomics.load(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1) !== 0) {
+			// console.log("tick waiting for render to be ready");
+		}
 
 		// lock the movablePositions SAB while working with it
-        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
+		Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 1);
 
-        for (let i = 0; i < movables.knownMovables.length; i++) {
-            // share the current position with the render thread
+		for (let i = 0; i < movables.knownMovables.length; i++) {
+			// share the current position with the render thread
 			// let currentPosition = movables.knownMovables[i].currentLocationXY;
-            
+
 			movables.knownMovables[i].incrementQuest();
 
 			// since each movable doesn't know where it sits in the movablePositions SAB, 
 			// we update that here instead of putting it inside of incrementQuest
-            movablePositions[i*2] = movables.knownMovables[i].x;
-            movablePositions[i*2+1] = movables.knownMovables[i].y;
-        }
+			movablePositions[i * 2] = movables.knownMovables[i].x;
+			movablePositions[i * 2 + 1] = movables.knownMovables[i].y;
+		}
 
-        // unlock the movablePositions SAB now that we're done with it
-        Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
-    }, 500);
+		// unlock the movablePositions SAB now that we're done with it
+		Atomics.store(movablePositions, MAX_MOVABLES * 2 + NUM_EXTRA_BITS - 1, 0);
+	}, 500);
 
 	taskQueue.addTask(0, moveAllMovablesTask);
-        
 
-    let movableOne = new Movable(0,0, 1);
+
+	let movableOne = new Movable(0, 0, 1);
 	movables.add(movableOne)
 	// movableOne.quest = [new Action([
 	// 	new AtomicAction(MOVE_ACTION, [0,0, movableOne])
 	// ])]
-	
-	let movableTwo = new Movable(7,1, 2);
+
+	let movableTwo = new Movable(7, 1, 2);
 	movables.add(movableTwo)
 	// movableTwo.quest = [new Action([
 	// 	new AtomicAction(MOVE_ACTION, [7,1, movableTwo]),
@@ -1003,7 +1040,7 @@ self.onmessage = e => {
 	// 	new AtomicAction(MOVE_ACTION, [1,1, movableTwo])
 	// ])];
 
-	let movableThree = new Movable(7,2, 3);
+	let movableThree = new Movable(7, 2, 3);
 	movables.add(movableThree)
 	// movableThree.quest = [new Action([
 	// 	new AtomicAction(MOVE_ACTION, [7,2, movableThree]),
@@ -1014,82 +1051,82 @@ self.onmessage = e => {
 	// 	new AtomicAction(MOVE_ACTION, [2,2, movableThree]),
 	// 	new AtomicAction(MOVE_ACTION, [1,2, movableThree])
 	// ])];
-   
 
-    //#region - add 20_000 people and have them wander randomly
-    
-    // let numPeople = 20_000;
-    // let testRange = 1000;
-    // let pathLength = 100;
-    // for (let i = 0; i < numPeople; i++) {
-    //     let path = [Math.floor(Math.random()*testRange), Math.floor(Math.random()*testRange)]
-    //     // console.log("========")
-    //     // console.log(`Starting at: ${path[0], path[1]}`)
-    //     for (let i = 0; i < pathLength; i++) {
-    //         // console.log(i);
-    //         let offset = Math.random();
-    //         if (offset > 0.5) {
-    //             offset = 1;
-    //         } else {
-    //             offset = -1;
-    //         }
-    //         if (Math.random() > 0.5) {
-    //             // console.log(`setting ${i*2+2} = ${path[i*2]}`)
 
-    //             path[i*2+2] = Math.max(path[i*2] + offset, 0);
-    //             path[i*2+2+1] = path[i*2+1]
-    //         } else {
-    //             path[i*2+2] = path[i*2] 
-    //             path[i*2+2+1] = Math.max(path[i*2+1] + offset, 0);
-    //         }
-    //     }
-    //     movables.push(new Movable(path));
-    // }
-    // console.log(movables);
-    //#endregion
+	//#region - add 20_000 people and have them wander randomly
 
-    function tick(params) {
-        // console.log('---tick---')
-        const startTime = performance.now();
+	// let numPeople = 20_000;
+	// let testRange = 1000;
+	// let pathLength = 100;
+	// for (let i = 0; i < numPeople; i++) {
+	//     let path = [Math.floor(Math.random()*testRange), Math.floor(Math.random()*testRange)]
+	//     // console.log("========")
+	//     // console.log(`Starting at: ${path[0], path[1]}`)
+	//     for (let i = 0; i < pathLength; i++) {
+	//         // console.log(i);
+	//         let offset = Math.random();
+	//         if (offset > 0.5) {
+	//             offset = 1;
+	//         } else {
+	//             offset = -1;
+	//         }
+	//         if (Math.random() > 0.5) {
+	//             // console.log(`setting ${i*2+2} = ${path[i*2]}`)
 
-        // this should be in the scheduled tasks for a future tick, not implemented immediately
-        if (Atomics.load(gameState, 0) == 1) {
-            console.log('game is paused, skipping tick')
-            return;
-        }
+	//             path[i*2+2] = Math.max(path[i*2] + offset, 0);
+	//             path[i*2+2+1] = path[i*2+1]
+	//         } else {
+	//             path[i*2+2] = path[i*2] 
+	//             path[i*2+2+1] = Math.max(path[i*2+1] + offset, 0);
+	//         }
+	//     }
+	//     movables.push(new Movable(path));
+	// }
+	// console.log(movables);
+	//#endregion
 
-        // #region - for debug: check if each players position is different from their target position
-        // [1,2].forEach((currentDebugUserIndex)=>{
-        //     const currentTargetPositionAsXYCoordinate = movables.knownMovables[currentDebugUserIndex].targetPosition
-        //     // console.log(currentTargetPositionAsXYCoordinate)
-        //     const currentTargetPositionAs1DCorrdinate = helpers.get1DCoordinateFromXYCoordinate(currentTargetPositionAsXYCoordinate[0], currentTargetPositionAsXYCoordinate[1], MAP_WIDTH)
-        //     // console.log(currentTargetPositionAs1DCorrdinate);
-        //     const currentGameStateTargetPosition = Atomics.load(gameState, currentDebugUserIndex);
-        //     // console.log(currentGameStateTargetPosition)
-        //     // if old target position doesn't match new target position, target position has changed, and the path should be recalculated
-        //     if (currentTargetPositionAs1DCorrdinate != currentGameStateTargetPosition) {
-        //         console.log(currentTargetPositionAs1DCorrdinate, currentGameStateTargetPosition);
-        //         // maybe should be just converting the currentGameStateTargetPosition into XY straight off the bat
-        //         // instead of doing two converstions.
-        //         const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentGameStateTargetPosition, MAP_WIDTH)
-                
-        //         // calculate bucketed A*
-        //         let aStarReturn = doAStar(movables.knownMovables[currentDebugUserIndex], x, y);
-        //         console.log({aStarReturn});
-        //         if (!aStarReturn) {
-        //             console.error(`PAUSE`);
-        //             clearInterval(refVar);
-        //         }
-        //     }
-        // })
-        //#endregion
+	function tick(params) {
+		// console.log('---tick---')
+		const startTime = performance.now();
 
-        taskQueue.doCurrentTasks();
-        
-        const endTime = performance.now();
-        // console.log(`Tick duration: ${endTime - startTime} ms`);
-    }
+		// this should be in the scheduled tasks for a future tick, not implemented immediately
+		if (Atomics.load(gameState, 0) == 1) {
+			console.log('game is paused, skipping tick')
+			return;
+		}
 
-    tick();
-    let refVar = setInterval(tick, TICK_PERIOD_MS);
+		// #region - for debug: check if each players position is different from their target position
+		// [1,2].forEach((currentDebugUserIndex)=>{
+		//     const currentTargetPositionAsXYCoordinate = movables.knownMovables[currentDebugUserIndex].targetPosition
+		//     // console.log(currentTargetPositionAsXYCoordinate)
+		//     const currentTargetPositionAs1DCorrdinate = helpers.get1DCoordinateFromXYCoordinate(currentTargetPositionAsXYCoordinate[0], currentTargetPositionAsXYCoordinate[1], MAP_WIDTH)
+		//     // console.log(currentTargetPositionAs1DCorrdinate);
+		//     const currentGameStateTargetPosition = Atomics.load(gameState, currentDebugUserIndex);
+		//     // console.log(currentGameStateTargetPosition)
+		//     // if old target position doesn't match new target position, target position has changed, and the path should be recalculated
+		//     if (currentTargetPositionAs1DCorrdinate != currentGameStateTargetPosition) {
+		//         console.log(currentTargetPositionAs1DCorrdinate, currentGameStateTargetPosition);
+		//         // maybe should be just converting the currentGameStateTargetPosition into XY straight off the bat
+		//         // instead of doing two converstions.
+		//         const {x,y} = helpers.getXYCoordinateFrom1DCoordinate(currentGameStateTargetPosition, MAP_WIDTH)
+
+		//         // calculate bucketed A*
+		//         let aStarReturn = doAStar(movables.knownMovables[currentDebugUserIndex], x, y);
+		//         console.log({aStarReturn});
+		//         if (!aStarReturn) {
+		//             console.error(`PAUSE`);
+		//             clearInterval(refVar);
+		//         }
+		//     }
+		// })
+		//#endregion
+
+		taskQueue.doCurrentTasks();
+
+		const endTime = performance.now();
+		// console.log(`Tick duration: ${endTime - startTime} ms`);
+	}
+
+	tick();
+	let refVar = setInterval(tick, TICK_PERIOD_MS);
 }

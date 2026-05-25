@@ -125,7 +125,7 @@ function init() {
 
     const drawableResourcesMapMaskSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
 	const drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
-	drawableResourcesMapMask.fill(0);
+	drawableResourcesMapMask.fill(0xFFFFFFFF);
 
     tickThread.postMessage({
         movablePositionsSab,

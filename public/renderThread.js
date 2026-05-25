@@ -141,15 +141,17 @@ self.onmessage = e => {
                 ctx.fill();
             }
 
-			if (Atomics.load(drawableResourcesMapMask, gridIdx) == 1) {
-                // if (debug < 9) {
-                // //     console.log()
-                //     console.log(gridIdx)
-                //     debug += 1;
-                // }
-                ctx.fillStyle = `#785d31`;
-                ctx.fill();
-            }
+			const currentResourceCell = Atomics.load(drawableResourcesMapMask, gridIdx);
+			if (currentResourceCell != 0xFFFFFFFF) {
+				const [resourceId, resourceQty] = helpers.uint32ToResource(currentResourceCell);
+				if (resourceId == 0) {
+					ctx.fillStyle = `#785d31`;
+					ctx.fill();
+				} else if (resourceId == 1) {
+					ctx.fillStyle = `#777777`;
+					ctx.fill();
+				}
+			}
             
 			
             
