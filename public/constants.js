@@ -31,3 +31,5 @@ export const TICK_PERIOD_MS = 250;
 
 export const MAP_WIDTH  = 100;
 export const MAP_HEIGHT = 100;
+
+export const MAX_RESOURCES_PER_STACK = 1;

@@ -150,6 +150,9 @@ self.onmessage = e => {
 				} else if (resourceId == 1) {
 					ctx.fillStyle = `#777777`;
 					ctx.fill();
+				} else if (resourceId == 2) {
+					ctx.fillStyle = `#e8e0bc`;
+					ctx.fill();
 				}
 			}
             

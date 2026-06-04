@@ -4,5 +4,8 @@ export const resourceTypes = [
     },
     {
         name: 'stone',
+    },
+	{
+        name: 'plank',
     }
 ]

@@ -5,7 +5,8 @@ import {
 	TICK_PERIOD_MS,
 	MAP_WIDTH,
 	MAP_HEIGHT,
-	DIRECTIONS
+	DIRECTIONS,
+	MAX_RESOURCES_PER_STACK
 } from './constants.js';
 import helpers from './helpers.js';
 import { resourceTypes } from './resourceTypes.js';
@@ -131,7 +132,7 @@ class AtomicAction {
 			case DROPOFF_ACTION:
 				// [movable, building, resource]
 				this.aaParams[0].heldResource = 0;
-				this.aaParams[1].addToConstructionResources(this.aaParams[2].resourceId);
+				this.aaParams[1].addToHeldResources(this.aaParams[2].resourceId);
 				break;
 			case BUILD_ACTION:
 				// [movable, building]
@@ -139,7 +140,7 @@ class AtomicAction {
 				this.aaParams[1].updateBuildAmount(this.aaParams[1].remainingBuildSteps - 1);
 				if (this.aaParams[1].remainingBuildSteps > 0) {
 					this.aaParams[0].quest[this.aaParams[0].indexOfCurrentQuestAction].indexOfCurrentAtomicAction--;
-				}
+				} 
 				break;
 			default:
 				break;
@@ -200,6 +201,8 @@ class Movable {
 		this.x = x;
 		this.y = y;
 		this.id = id;
+		// initialises the movable in an idle state (including the indexOfCurrentQuestAction) 
+		this.clearQuest();
 	}
 
 
@@ -221,11 +224,14 @@ class Movable {
 	}
 
 	incrementQuest() {
-		// if idle, don't move to the next step
-		if (this.isIdle) {
+		// if they have a step to do then do it, but if they don't then don't
+		if (this.isFinishedWithQuest) {
 			return;
 		}
 
+		if (!this.#quest[this.indexOfCurrentQuestAction]) {
+			console.log('hmm no quest?');
+		}
 		this.#quest[this.indexOfCurrentQuestAction].incrementAction();
 
 		// we use ?. here because in the process of incrementing the action, we may be deleting the current quest that the movable is working on 
@@ -234,19 +240,17 @@ class Movable {
 			this.indexOfCurrentQuestAction += 1;
 		}
 
-		// note that we do this in both cases because if the final action only has one atomic action
-		// then if we check it in the branch then it wouldn't be triggered
-		if (this.isIdle) {
+		if (this.isFinishedWithQuest) {
 			this.task?.cancel();
-			// doTaskMatchmake(taskQueue.getTickInFuture(1));
-			// tryFindingResourceMatch(null, null, this, taskQueue.getTickInFuture(1));
 		}
 	}
 
+	get isFinishedWithQuest() {
+		return this.indexOfCurrentQuestAction >= this.#quest.length;
+	}
+
 	get isIdle() {
-		// technically the the isFinished check is redundant, can't hurt to have it, 
-		// but really it's the indexOfCurrentQuestAction which will get into out of bounds territory when idle
-		return this.indexOfCurrentQuestAction >= this.#quest.length //&& this.#quest[this.indexOfCurrentQuestAction].isFinished;
+		return this.task == undefined // && this.isFinishedWithQuest //&& this.#quest[this.indexOfCurrentQuestAction].isFinished;
 	}
 
 	getDistanceTo(x, y) {
@@ -390,8 +394,10 @@ class Resources {
 
 	constructor() { }
 
-	add(resourceId, x, y) {
-		this.knownResources.push(new Resource(this, resourceId, x, y))
+	add(resourceId, x, y, source = null) {
+		let newResource = new Resource(this, resourceId, x, y, source)
+		this.knownResources.push(newResource)
+		return newResource;
 	}
 
 	remove(resourceToremove) {
@@ -434,11 +440,13 @@ class Resource {
 	floorLocation;
 	// e.g if a settler is walking to a piece of wood, nobody else can access it
 	reservedForAction = false;
+	source;
 
-	constructor(resources, resourceId, x, y) {
+	constructor(resources, resourceId, x, y, source = null) {
 		this.resources = resources;
 		this.resourceId = resourceId;
 		this.setLocation(x, y)
+		this.source = source;
 	}
 
 	get isAvailable() {
@@ -467,6 +475,10 @@ class Resource {
 
 	removeFromWorld() {
 		this.qty--;
+		if (this.source) {
+			this.source.resourceRemoved(this);
+			this.source = null;
+		}
 		if (this.qty == 0) {
 			this.resources.remove(this);
 			Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0xFFFFFFFF);
@@ -492,8 +504,10 @@ class Building {
 	x;
 	y;
 	id;
-	heldConstructionResources = {};
+	heldResources = {};
+	outfeedResources = {};
 	associatedTasks = [];
+	
 
 	constructor(buildingIndex, x, y, id) {
 		this.buildingIndex = buildingIndex;
@@ -549,33 +563,81 @@ class Building {
 
 		if (this.#remainingBuildSteps == 0) {
 			this.cancelAllTasks();
+			
+			// clear the resources so that it's got a fresh slate upon being built
+			this.heldResources = {};
+			
+			buildingTypes[this.buildingIndex].resourcesInDemand.forEach((resourceId)=>{
+				this.addAssociatedTask(availableTasks.add(new ResourceRequest(this, resourceId), 2));
+			})
 		}
 	}
 
 	canBeBuilt() {
-		for (const [resourceId, resourceQty] of Object.entries(buildingTypes[this.buildingIndex].constructionResources)) {
-			if (!this.heldConstructionResources.hasOwnProperty(resourceId) || 
-				this.heldConstructionResources[resourceId] != resourceQty) {
+		return this.hasResources(buildingTypes[this.buildingIndex].constructionResources);
+	}
+
+	hasResources(resourceSet) {
+		for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
+			// if either it doesn't have any or it doesn't have enough, then early exit
+			if (!this.heldResources.hasOwnProperty(resourceId) || this.heldResources[resourceId] < resourceQty) {
 				return false;
 			}
 		}
 		return true;
-		// return this.heldConstructionResources == buildingTypes[this.buildingIndex].constructionResources
 	}
 
-	addToConstructionResources(resourceId) {
-		if (!this.heldConstructionResources.hasOwnProperty(resourceId)) {
-			this.heldConstructionResources[resourceId] = 1;
-		} else {
-			this.heldConstructionResources[resourceId] += 1;
-		}
-		// if the building now has all the resource it needs
-		if (this.canBeBuilt()) {
-			// put a call out for builders to build it
-			for (let i = 0; i < buildingTypes[this.buildingIndex].maxBuilders; i++) {
-				this.addAssociatedTask(availableTasks.add(new BuildRequest(this), 2));
-				doTaskMatchmake(taskQueue.getTickInFuture(1));
+	hasOutputFeedSpace(resourceSet) {
+		for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
+			// we early exit if both the output stack exists, and also it doesn't have enough space
+			if (this.outfeedResources.hasOwnProperty(resourceId) && resourceQty + this.outfeedResources[resourceId] > MAX_RESOURCES_PER_STACK) {
+				return false;
 			}
+		}
+		return true;
+	}
+
+	addToHeldResources(resourceId) {
+		if (!this.heldResources.hasOwnProperty(resourceId)) {
+			this.heldResources[resourceId] = 1;
+		} else {
+			this.heldResources[resourceId] += 1;
+		}
+		console.log(resourceId);
+		// if the building is not built
+		if (this.#remainingBuildSteps > 0) {
+			if (this.canBeBuilt()) {
+				// put a call out for builders to build it
+				for (let i = 0; i < buildingTypes[this.buildingIndex].maxBuilders; i++) {
+					this.addAssociatedTask(availableTasks.add(new BuildRequest(this), 2));
+					doTaskMatchmake(taskQueue.getTickInFuture(1));
+				}
+			}
+		} else {
+			// if the building is built
+			this.makeFabricationRequestIfPossible();
+		}
+	}
+
+	addToOutfeedResources(resource) {
+		if (!this.outfeedResources.hasOwnProperty(resource.resourceId)) {
+			this.outfeedResources[resource.resourceId] = 1;
+		} else {
+			this.outfeedResources[resource.resourceId]++;
+		}
+	}
+
+	makeFabricationRequestIfPossible() {
+		buildingTypes[this.buildingIndex].fabrications.forEach((fabrication)=>{
+			if (this.hasResources(fabrication.input) && this.hasOutputFeedSpace(fabrication.output)) {
+				this.addAssociatedTask(availableTasks.add(new FabricationRequest(this, fabrication), 2));
+			}
+		})
+	}
+
+	removeFromHeldResources(resourceSet) {
+		for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
+			this.heldResources[resourceId] -= resourceQty;
 		}
 	}
 
@@ -585,6 +647,13 @@ class Building {
 				return this.associatedTasks.splice(j, 1)[0];
 			}
 		}
+	}
+
+	resourceRemoved(resource) {
+		// it doesn't matter which one you remove, because they all should have this building as its source
+		// and they all should be at the same location, so they're equivalent
+		this.outfeedResources[resource.resourceId]--;
+		this.makeFabricationRequestIfPossible();
 	}
 }
 
@@ -635,7 +704,12 @@ class ResourceRequest {
 	// assume this never gets called unless there are idle villagers, so you're checking for everything else
 	get canBeDone() {
 		// this will need to be updated when there are more than one type of resource
-		return resources.knownResources.length > 0;
+		for (let i = 0; i < resources.knownResources.length; i++) {
+			if (resources.knownResources[i].resourceId == this.resourceId && resources.knownResources[i].isAvailable) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	cancel() {
@@ -680,6 +754,36 @@ class BuildRequest {
 	}
 }
 
+class FabricationRequest {
+	source;
+	assignedTo;
+	fabricationSet;
+
+	constructor(source, fabricationSet) {
+		this.source = source;
+		this.fabricationSet = fabricationSet;
+	}
+
+	setID(id) {
+		this.id = id
+	}
+
+	get canBeDone() {
+		return this.source.hasResources(this.fabricationSet.input);
+	}
+
+	cancel() {
+		this.source.cancelTask(this);
+		if (this.assignedTo) {
+			// remove from person it was assigned to
+			this.assignedTo.task = undefined;
+			this.assignedTo.clearQuest();
+		} else {
+			// remove from backlog of tasks
+			availableTasks.cancelTask(this);
+		}
+	}
+}
 
 const totalTicks = MAX_SCHEDULE_DURATION_MS / TICK_PERIOD_MS;
 
@@ -756,12 +860,44 @@ function doTaskMatchmake(tickToAssignTo) {
 				new Action(aStarMovable(movable.x, movable.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
 				new Action([new AtomicAction(BUILD_ACTION, [movable, villagerTask.source])]),
 			]
+		} else if (villagerTask instanceof FabricationRequest) {
+			const movable = movables.findClosestIdleTo(villagerTask.source.entranceX, villagerTask.source.entranceY)
+			// this would be redundant if we had two separate arrays for knownMovables and idleMovables
+			if (movable == null) {
+				return;
+			}
+
+			villagerTask.assignedTo = movable;
+			movable.task = villagerTask;
+
+			// immediately destroy the input resources
+			villagerTask.source.removeFromHeldResources(villagerTask.fabricationSet.input);
+			console.log(villagerTask.source);
+			console.log(villagerTask)
+
+			// create a task at a future tick to create the output resources and also cancel the task so the movable becomes idle again
+			taskQueue.addTask(taskQueue.getTickInFuture(villagerTask.fabricationSet.durationInMs/TICK_PERIOD_MS), new Task((i) => {
+				console.log(`creating plank`);
+				// create the output resource
+				for (const [resourceId, resourceQty] of Object.entries(villagerTask.fabricationSet.output)) {
+					let relativePositionArray = buildingTypes[villagerTask.source.buildingIndex].outputLocations[resourceId]
+					let newX = villagerTask.source.x + relativePositionArray[0]
+					let newY = villagerTask.source.y + relativePositionArray[1]
+					let newResource = resources.add(resourceId, newX, newY, villagerTask.source);
+					villagerTask.source.addToOutfeedResources(newResource);
+				}
+				// make new ResourceRequests to replace all of the resources that were just consumed
+				for (const [resourceId, resourceQty] of Object.entries(villagerTask.fabricationSet.input)) {
+					for (let i = 0; i < resourceQty; i++) {
+						villagerTask.source.addAssociatedTask(availableTasks.add(new ResourceRequest(villagerTask.source, resourceId), 2));
+					}
+				}
+
+				villagerTask.cancel();
+				console.log(villagerTask.source);
+			}))
+			console.log(taskQueue);
 		}
-
-
-
-
-
 	}));
 }
 
@@ -975,18 +1111,22 @@ self.onmessage = e => {
 	buildingsMap = new Uint32Array(buildingsMapSab)
 
 	// create a dummy piece of wood for testing
-	resources.add(0, 3, 0);
+	resources.add(2, 3, 0);
 	resources.add(0, 10, 10);
 	resources.add(0, 10, 12);
 	resources.add(0, 11, 0);
 	resources.add(0, 12, 1);
 	resources.add(0, 13, 2);
 	resources.add(0, 15, 2);
+	resources.add(0, 8, 0);
+	resources.add(0, 9, 0);
 	resources.add(1, 3, 4);
 	resources.add(1, 2, 5);
 	resources.add(1, 1, 6);
 	resources.add(1, 3, 10);
 	resources.add(1, 4, 11);
+	resources.add(1, 5, 12);
+	resources.add(0, 7, 0);
 
 	// let dummyVillager = new Movable([5,3,5,2,4,2,3,2,2,2,2,1]);
 	// let dummyVillager2 = new Movable([10,1,9,1,8,1]);
