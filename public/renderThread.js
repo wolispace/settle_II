@@ -12,8 +12,8 @@ function drawHex(ctx, centerPixelX, leftLimit, hexWidthHalf, centerPixelY, topLi
     ctx.closePath();
 }
 self.onmessage = async (e) => {
-    const { gameCanvasOffscreen, playerStateSab, movablePositionsSab, terrainMapMaskSab, worldObjectsMapMaskSab, collisionsMapMaskSab, drawableResourcesMapMaskSab, buildingsMapSab, scale, widthVal, heightVal } = e.data;
-    const worldObjectsMapMask = new Uint32Array(worldObjectsMapMaskSab);
+    const { gameCanvasOffscreen, playerStateSab, movablePositionsSab, terrainMapMaskSab, worldObjectsMapSab, collisionsMapMaskSab, drawableResourcesMapMaskSab, buildingsMapSab, scale, widthVal, heightVal } = e.data;
+    const worldObjectsMap = new Uint32Array(worldObjectsMapSab);
     const playStateArray = new Int32Array(playerStateSab);
     const movablePositions = new Uint32Array(movablePositionsSab);
     const drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
@@ -138,7 +138,7 @@ self.onmessage = async (e) => {
                     buildingsSeenThisStep.add(currentBuildingID);
                 }
             }
-            if (Atomics.load(worldObjectsMapMask, gridIdx) != 0) {
+            if (Atomics.load(worldObjectsMap, gridIdx) == 0) {
                 const [centerPixelX, centerPixelY] = helpers.getPixelCenterFromCell(currentCellXY.x, currentCellXY.y, HEX_RADIUS);
                 // ctx.fillStyle = `#023020`;
                 // ctx.fill();

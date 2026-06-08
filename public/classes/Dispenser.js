@@ -1,44 +1,56 @@
-// class Dispensers {
-// 	knownDispensers = [];
-// 	drawableDispensersMapMask;
-// 	constructor() {
-// 	}
-// 	add(resourceId, x, y, source = null) {
-// 		let newResource = new Resource(this, resourceId, x, y, source)
-// 		this.knownResources.push(newResource)
-// 		return newResource;
-// 	}
-// 	remove(resourceToremove) {
-// 		console.log(resourceToremove);
-// 		for (let i = 0; i < this.knownResources.length; i++) {
-// 			if (this.knownResources[i].floorLocation.x == resourceToremove.floorLocation.x
-// 				&& this.knownResources[i].floorLocation.y == resourceToremove.floorLocation.y) {
-// 				this.knownResources.splice(i, 1);
-// 				return true;
-// 			}
-// 		}
-// 		return false;
-// 	}
-// 	findClosestTo(x, y, resourceId) {
-// 		let closesDistance = furthestDiagonalDistance;
-// 		let foundResource = null;
-// 		for (let i = 0; i < this.knownResources.length; i++) {
-// 			if (this.knownResources[i].resourceId != resourceId) {
-// 				continue;
-// 			}
-// 			if (!this.knownResources[i].isAvailable) {
-// 				continue;
-// 			}
-// 			const currentDistance = this.knownResources[i].getDistanceTo(x, y);
-// 			if (currentDistance < closesDistance) {
-// 				foundResource = this.knownResources[i];
-// 				closesDistance = currentDistance;
-// 			}
-// 		}
-// 		return foundResource;
-// 	}
-// }
-// class Dispenser {
-// 	constructor() {
-// 	}
-// }
+import { tc } from '../tickContext.js';
+import helpers from '../helpers.js';
+import { MAP_WIDTH } from '../constants.js';
+class Dispensers {
+    constructor() {
+        this.knownDispensers = {};
+    }
+    add(dispenser) {
+        if (!this.knownDispensers.hasOwnProperty(dispenser.resourceId)) {
+            this.knownDispensers[dispenser.resourceId] = [];
+        }
+        this.knownDispensers[dispenser.resourceId].push(dispenser);
+        return dispenser;
+    }
+    remove(dispenser) {
+        for (let i = 0; i < this.knownDispensers[dispenser.resourceId].length; i++) {
+            if (this.knownDispensers[dispenser.resourceId][i].x == dispenser.x
+                && this.knownDispensers[dispenser.resourceId][i].y == dispenser.y) {
+                this.knownDispensers[dispenser.resourceId].splice(i, 1);
+                return true;
+            }
+        }
+        return false;
+    }
+    findClosestTo(x, y, resourceId) {
+        let closesDistance = tc.furthestDiagonalDistance;
+        let foundDispenser = null;
+        for (let i = 0; i < this.knownDispensers[resourceId].length; i++) {
+            if (!this.knownDispensers[resourceId][i].isAvailable) {
+                continue;
+            }
+            const currentDistance = this.knownDispensers[resourceId][i].getDistanceTo(x, y);
+            if (currentDistance < closesDistance) {
+                foundDispenser = this.knownDispensers[resourceId][i];
+                closesDistance = currentDistance;
+            }
+        }
+        return foundDispenser;
+    }
+}
+class Dispenser {
+    constructor(x, y, resourceId, qty) {
+        this.x = x;
+        this.y = y;
+        this.resourceId = resourceId;
+        this.qty = qty;
+        Atomics.store(tc.worldObjectsMap, helpers.get1DCoordinateFromXYCoordinate(this.x, this.y, MAP_WIDTH), this.resourceId);
+    }
+    get isAvailable() {
+        return this.taskReservedFor == undefined;
+    }
+    getDistanceTo(x, y) {
+        return tc.getHeuristicCost(x, y, this.x, this.y);
+    }
+}
+export { Dispensers, Dispenser };

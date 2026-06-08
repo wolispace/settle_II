@@ -18,7 +18,11 @@ export const buildingTypes = [
         },
         buildSteps: 20,
         maxBuilders: 10,
-        fabrications: [],
+        fabrications: [{
+                input: null,
+                output: 0,
+                durationInMs: 2000
+            }],
         outputLocations: {},
         resourcesInDemand: []
     },

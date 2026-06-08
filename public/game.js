@@ -84,10 +84,9 @@ function init() {
     Atomics.store(gameState, 1, 21);
     Atomics.store(gameState, 2, 41);
     const terrainMapMaskSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
-    const worldObjectsMapMaskSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
-    const worldObjectsMapMask = new Uint32Array(worldObjectsMapMaskSab);
-    worldObjectsMapMask.fill(0);
-    Atomics.store(worldObjectsMapMask, helpers.get1DCoordinateFromXYCoordinate(20, 10, MAP_WIDTH), 1);
+    const worldObjectsMapSab = new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
+    const worldObjectsMap = new Uint32Array(worldObjectsMapSab);
+    worldObjectsMap.fill(0xFFFFFFFF);
     const collisionsMapMaskSab = new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * MAP_WIDTH * MAP_HEIGHT);
     const collisionsMapMask = new Uint8Array(collisionsMapMaskSab);
     collisionsMapMask.fill(0);
@@ -103,14 +102,15 @@ function init() {
         gameStateSab,
         collisionsMapMaskSab,
         drawableResourcesMapMaskSab,
-        buildingsMapSab
+        buildingsMapSab,
+        worldObjectsMapSab
     });
     renderThread.postMessage({
         gameCanvasOffscreen,
         playerStateSab,
         movablePositionsSab,
         terrainMapMaskSab,
-        worldObjectsMapMaskSab,
+        worldObjectsMapSab,
         collisionsMapMaskSab,
         drawableResourcesMapMaskSab,
         buildingsMapSab,

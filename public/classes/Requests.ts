@@ -3,7 +3,6 @@ import { tc } from '../tickContext.js';
 class ResourceRequest {
 	source;
 	resourceId;
-	// isTaken = false;
 	assignedTo;
 	id;
 
@@ -11,13 +10,8 @@ class ResourceRequest {
 		this.source = source;
 		this.resourceId = resourceId;
 
-		// tryFindingResourceMatch(this, null, null, taskQueue.getTickInFuture(1));
 		tc.doTaskMatchmake(tc.taskQueue.getTickInFuture(1))
 	}
-
-	// get isAvailable() {
-	// 	return !this.isTaken;
-	// }
 
 	setID(id) {
 		this.id = id
@@ -110,4 +104,40 @@ class FabricationRequest {
 	}
 }
 
-export { ResourceRequest, BuildRequest, FabricationRequest };
+class DispenserFetchRequest {
+	source;
+	resourceId;
+	assignedTo;
+	id;
+
+	constructor(source, resourceId) {
+		this.source = source;
+		this.resourceId = resourceId;
+
+		tc.doTaskMatchmake(tc.taskQueue.getTickInFuture(1))
+	}
+
+	setID(id) {
+		this.id = id
+	}
+
+	// assume this never gets called unless there are idle villagers, so you're checking for everything else
+	get canBeDone() {
+		return tc.dispensers.knownDispensers?.[this.resourceId].length > 0
+	}
+
+	cancel() {
+		this.source.cancelTask(this);
+		if (this.assignedTo) {
+			// remove from person it was assigned to
+			this.assignedTo.makeIdle();
+		} else {
+			// remove from backlog of tasks
+			tc.availableTasks.cancelTask(this);
+		}
+	}
+}
+
+
+
+export { ResourceRequest, BuildRequest, FabricationRequest, DispenserFetchRequest };

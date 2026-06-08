@@ -1,6 +1,6 @@
 import { buildingTypes } from '../buildingTypes.js';
 import { tc } from '../tickContext.js';
-import { ResourceRequest, BuildRequest, FabricationRequest } from './Requests.js';
+import { ResourceRequest, BuildRequest, FabricationRequest, DispenserFetchRequest } from './Requests.js';
 import helpers from '../helpers.js';
 import {
 	MAP_WIDTH,
@@ -8,7 +8,7 @@ import {
 } from '../constants.js';
 
 class Buildings {
-	knownBuildings = [];
+	knownBuildings: Array<Building> = [];
 	newBuildingID = 0;
 
 	constructor() { }
@@ -135,7 +135,7 @@ class Building {
 			}
 		} else {
 			// if the building is built
-			this.makeFabricationRequestIfPossible();
+			this.makeOperationRequestIfPossible();
 		}
 	}
 
@@ -147,9 +147,11 @@ class Building {
 		}
 	}
 
-	makeFabricationRequestIfPossible() {
+	makeOperationRequestIfPossible() {
 		buildingTypes[this.buildingIndex].fabrications.forEach((fabrication)=>{
-			if (this.hasResources(fabrication.input) && this.hasOutputFeedSpace(fabrication.output)) {
+			if (fabrication.input == null) {
+				this.addAssociatedTask(tc.availableTasks.add(new DispenserFetchRequest(this, fabrication.output), 2));
+			} else if (this.hasResources(fabrication.input) && this.hasOutputFeedSpace(fabrication.output)) {
 				this.addAssociatedTask(tc.availableTasks.add(new FabricationRequest(this, fabrication), 2));
 			}
 		})
@@ -173,7 +175,7 @@ class Building {
 		// it doesn't matter which one you remove, because they all should have this building as its source
 		// and they all should be at the same location, so they're equivalent
 		this.outfeedResources[resource.resourceId]--;
-		this.makeFabricationRequestIfPossible();
+		this.makeOperationRequestIfPossible();
 	}
 }
 

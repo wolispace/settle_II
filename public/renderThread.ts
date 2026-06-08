@@ -26,7 +26,7 @@ self.onmessage = async (e) => {
 		playerStateSab, 
 		movablePositionsSab, 
 		terrainMapMaskSab, 
-		worldObjectsMapMaskSab,
+		worldObjectsMapSab,
 		collisionsMapMaskSab, 
 		drawableResourcesMapMaskSab, 
 		buildingsMapSab,
@@ -35,7 +35,7 @@ self.onmessage = async (e) => {
 		heightVal 
 	} = e.data;
 
-	const worldObjectsMapMask = new Uint32Array(worldObjectsMapMaskSab);
+	const worldObjectsMap = new Uint32Array(worldObjectsMapSab);
     const playStateArray = new Int32Array(playerStateSab); 
     const movablePositions = new Uint32Array(movablePositionsSab); 
 	const drawableResourcesMapMask = new Uint32Array(drawableResourcesMapMaskSab);
@@ -202,7 +202,7 @@ self.onmessage = async (e) => {
 				}
 			}
 
-			if (Atomics.load(worldObjectsMapMask, gridIdx) != 0) {
+			if (Atomics.load(worldObjectsMap, gridIdx) == 0) {
 				const [centerPixelX, centerPixelY] = helpers.getPixelCenterFromCell(currentCellXY.x, currentCellXY.y, HEX_RADIUS);
 				// ctx.fillStyle = `#023020`;
 				// ctx.fill();
