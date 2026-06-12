@@ -6,6 +6,7 @@ import { Jerver } from "https://joshprojects.site/modules/Jerver/V1.2.1.js";
 const pauseButton = document.querySelector('#pauseButton');
 const tempAddWoodcutterButton = document.querySelector('#tempAddWoodcutterButton');
 const tempAddSawmillButton = document.querySelector('#tempAddSawmillButton');
+const tempAddStonecutterButton = document.querySelector('#tempAddStonecutterButton');
 const roomForm = document.querySelector('#roomForm');
 const roomValue = document.querySelector('#roomValue');
 // Set actual size in memory (scaled to account for extra pixel density).
@@ -249,6 +250,9 @@ function init() {
     tempAddSawmillButton.addEventListener('click', () => {
         console.log(`clicked tempAddSawmillButton`);
         Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, 1);
+    });
+    tempAddStonecutterButton.addEventListener('click', () => {
+        Atomics.store(playStateArray, PLAYER_STATE_ARRAY_INDEXES.SELECTED_HOUSE_TYPE, 2);
     });
     // while developing, auto join the joshnwolis room
     window.roomName = 'joshnwolis';

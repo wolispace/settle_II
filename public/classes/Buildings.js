@@ -48,6 +48,10 @@ class Building {
     get entranceY() {
         return this.y + buildingTypes[this.buildingIndex].entrance[1];
     }
+    getOutfeedXY(resourceId) {
+        let relativePositionArray = buildingTypes[this.buildingIndex].outputLocations[resourceId];
+        return [this.x + relativePositionArray[0], this.y + relativePositionArray[1]];
+    }
     get remainingBuildSteps() {
         return __classPrivateFieldGet(this, _Building_remainingBuildSteps, "f");
     }
@@ -76,9 +80,17 @@ class Building {
             this.cancelAllTasks();
             // clear the resources so that it's got a fresh slate upon being built
             this.heldResources = {};
-            buildingTypes[this.buildingIndex].resourcesInDemand.forEach((resourceId) => {
-                this.addAssociatedTask(tc.availableTasks.add(new ResourceRequest(this, resourceId), 2));
-            });
+            if (buildingTypes[this.buildingIndex].fabrications[0].input == null) {
+                this.addAssociatedTask(tc.availableTasks.add(new DispenserFetchRequest(this, buildingTypes[this.buildingIndex].fabrications[0].output), 2));
+            }
+            else {
+                // as a reminder: resourcesInDemand shouldn't be generated on the fly because
+                // there might be several buildings with coal as input, and we don't want to request coal multiple times in those cases
+                // and it saves us from having to do static/constant calculations upon each building being built 
+                buildingTypes[this.buildingIndex].resourcesInDemand.forEach((resourceId) => {
+                    this.addAssociatedTask(tc.availableTasks.add(new ResourceRequest(this, resourceId), 2));
+                });
+            }
         }
     }
     canBeBuilt() {
@@ -124,12 +136,23 @@ class Building {
             this.makeOperationRequestIfPossible();
         }
     }
-    addToOutfeedResources(resource) {
-        if (!this.outfeedResources.hasOwnProperty(resource.resourceId)) {
-            this.outfeedResources[resource.resourceId] = 1;
+    addToOutfeedResources(resourceId) {
+        if (!this.outfeedResources.hasOwnProperty(resourceId)) {
+            let [x, y] = this.getOutfeedXY(resourceId);
+            tc.resources.add(resourceId, x, y, this);
+            this.outfeedResources[resourceId] = 1;
         }
         else {
-            this.outfeedResources[resource.resourceId]++;
+            if (this.outfeedResources[resourceId] == 0) {
+                let [x, y] = this.getOutfeedXY(resourceId);
+                tc.resources.add(resourceId, x, y, this);
+            }
+            else {
+                let err = `find the resource which is at that location, and increment the qty in its stack`;
+                console.error(err);
+                throw new Error(err);
+            }
+            this.outfeedResources[resourceId]++;
         }
     }
     makeOperationRequestIfPossible() {

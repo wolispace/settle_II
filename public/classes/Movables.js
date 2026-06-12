@@ -11,7 +11,7 @@ var __classPrivateFieldSet = (this && this.__classPrivateFieldSet) || function (
 };
 var _Movable_quest;
 import { tc } from '../tickContext.js';
-import { FabricationRequest } from './Requests.js';
+import { FabricationRequest, DispenserFetchRequest } from './Requests.js';
 class Movables {
     // idleMovables could exist here
     constructor() {
@@ -48,7 +48,7 @@ class Movable {
     constructor(x, y, id) {
         _Movable_quest.set(this, []);
         this.indexOfCurrentQuestAction = 0;
-        this.heldResource = 0;
+        this.heldResource = null;
         this.x = x;
         this.y = y;
         this.id = id;
@@ -87,7 +87,7 @@ class Movable {
             this.indexOfCurrentQuestAction += 1;
         }
         // the fabrication request needs to force end itself, it doesn't naturally end upon doing actionable steps because there's a timer gap
-        if (this.isFinishedWithQuest && !(this.task instanceof FabricationRequest)) {
+        if (this.isFinishedWithQuest && !(this.task instanceof FabricationRequest) && !(this.task instanceof DispenserFetchRequest)) {
             this.task?.cancel();
         }
     }

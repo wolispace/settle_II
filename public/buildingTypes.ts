@@ -23,7 +23,9 @@ export const buildingTypes = [
 			output: 0,
 			durationInMs: 2000 
 		}],
-		outputLocations: {},
+		outputLocations: {
+			0: [1, 1]
+		},
 		resourcesInDemand: []
     },
     {
@@ -54,5 +56,30 @@ export const buildingTypes = [
 			2: [1, 1]
 		},
 		resourcesInDemand: [0]
+    },
+    {
+        name: 'stonecutter',
+        collisionBox: [
+                [0,  0], [-1,  0], [1,  0], 
+                [0, -1], [-1, -1], [1, -1],
+                [0, -2],           [1, -2],
+            ],
+		bbox: [[-1, -2], [1, -2], [-1, 0], [1,0]],
+		entrance: [0, 1],
+		constructionResources: {
+			2: 1,
+			1: 1
+		},
+		buildSteps: 3,
+		maxBuilders: 10,
+		fabrications: [{
+			input: null, 
+			output: 1,
+			durationInMs: 2000 
+		}],
+		outputLocations: {
+			1: [1, 1]
+		},
+		resourcesInDemand: []
     }
 ]

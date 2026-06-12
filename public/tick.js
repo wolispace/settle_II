@@ -12,7 +12,6 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
 var _Action_atomicActions;
 import { MAX_MOVABLES, NUM_EXTRA_BITS, MAX_SCHEDULE_DURATION_MS, TICK_PERIOD_MS, MAP_WIDTH, MAP_HEIGHT, DIRECTIONS } from './constants.js';
 import helpers from './helpers.js';
-import { buildingTypes } from './buildingTypes.js';
 import { ResourceRequest, BuildRequest, FabricationRequest, DispenserFetchRequest } from './classes/Requests.js';
 import { Resources } from './classes/Resources.js';
 import { Movables, Movable } from './classes/Movables.js';
@@ -25,6 +24,7 @@ const DROPOFF_ACTION = 3;
 const BUILD_ACTION = 4;
 const FABRICATE_ACTION = 5;
 const DISPENSE_ACTION = 6;
+const END_ACTION = 7;
 class AvailableTasks {
     constructor() {
         this.knownTasks = [[], [], []];
@@ -111,14 +111,14 @@ class AtomicAction {
             // [resource, movable]
             this.aaParams[0].removeFromWorld();
             // this.aaParams[0].carriedBy = this.aaParams[1];
-            this.aaParams[1].heldResource = 1;
+            this.aaParams[1].heldResource = this.aaParams[0].resourceId;
         }
         else if (this.actionType == DROPOFF_ACTION) {
             // [movable, building, resource, dropOffToInput]
             let dropOffToInput = this.aaParams[3];
-            this.aaParams[0].heldResource = 0;
+            this.aaParams[0].heldResource = null;
             if (dropOffToInput) {
-                this.aaParams[1].addToHeldResources(this.aaParams[2].resourceId);
+                this.aaParams[1].addToHeldResources(this.aaParams[2]);
             }
             else {
                 this.aaParams[1].addToOutfeedResources(this.aaParams[2]);
@@ -143,11 +143,7 @@ class AtomicAction {
             tc.taskQueue.addTask(tc.taskQueue.getTickInFuture(villagerTask.fabricationSet.durationInMs / TICK_PERIOD_MS), new Task((i) => {
                 // create the output resource
                 for (const [resourceId, resourceQty] of Object.entries(villagerTask.fabricationSet.output)) {
-                    let relativePositionArray = buildingTypes[villagerTask.source.buildingIndex].outputLocations[resourceId];
-                    let newX = villagerTask.source.x + relativePositionArray[0];
-                    let newY = villagerTask.source.y + relativePositionArray[1];
-                    let newResource = tc.resources.add(resourceId, newX, newY, villagerTask.source);
-                    villagerTask.source.addToOutfeedResources(newResource);
+                    villagerTask.source.addToOutfeedResources(resourceId);
                 }
                 // make new ResourceRequests to replace all of the resources that were just consumed
                 for (const [resourceId, resourceQty] of Object.entries(villagerTask.fabricationSet.input)) {
@@ -163,25 +159,30 @@ class AtomicAction {
             let dispenser = this.aaParams[0];
             let movable = this.aaParams[1];
             let villagerTask = this.aaParams[2];
-            // clear the quest of the movable, but keep their task intact
-            movable.clearQuestOnly();
-            // add resource to villager in case they are interrupted
+            // 4) pause while chopping wood
+            // tc.taskQueue.addTask(tc.taskQueue.getTickInFuture(villagerTask.fabricationSet.durationInMs/TICK_PERIOD_MS), new Task((i) => {
             movable.heldResource = dispenser.resourceId;
+            dispenser.reduce();
             // reset the dispenser taskReservedFor
             dispenser.taskReservedFor = null;
-            // 4) pause while chopping wood
-            tc.taskQueue.addTask(tc.taskQueue.getTickInFuture(villagerTask.fabricationSet.durationInMs / TICK_PERIOD_MS), new Task((i) => {
-                let relativePositionArray = buildingTypes[villagerTask.source.buildingIndex].outputLocations[dispenser.resourceId];
-                let newX = villagerTask.source.x + relativePositionArray[0];
-                let newY = villagerTask.source.y + relativePositionArray[1];
-                let resource = tc.resources.add(dispenser.resourceId, newX, newY, villagerTask.source);
-                movable.quest = [
-                    // 5) walk to building
-                    new Action(aStarMovable(movable.x, movable.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
-                    // 6) deliver wood to output of the building
-                    new Action([new AtomicAction(DROPOFF_ACTION, [movable, villagerTask.source, resource, false])])
-                ];
-            }));
+            // let relativePositionArray = buildingTypes[villagerTask.source.buildingIndex].outputLocations[dispenser.resourceId]
+            // let newX = villagerTask.source.x + relativePositionArray[0];
+            // let newY = villagerTask.source.y + relativePositionArray[1];
+            // let resource = tc.resources.add(dispenser.resourceId, newX, newY, villagerTask.source);
+            // clear the quest of the movable, but keep their task intact
+            movable.clearQuestOnly();
+            movable.quest = [
+                // 5) walk to building
+                new Action(aStarMovable(movable.x, movable.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
+                // 6) deliver wood to output of the building
+                new Action([new AtomicAction(DROPOFF_ACTION, [movable, villagerTask.source, dispenser.resourceId, false])]),
+                new Action([new AtomicAction(END_ACTION, [villagerTask])])
+            ];
+            // }));
+        }
+        else if (this.actionType == END_ACTION) {
+            //[villagerTask]
+            this.aaParams[0].cancel();
         }
     }
 }
@@ -333,12 +334,13 @@ tc.doTaskMatchmake = (tickToAssignTo) => {
             resource.reservedForAction = true;
             // villagerTask.isTaken = true;
             movable.task = villagerTask;
-            movable.quest = [
+            let questStuff = [
                 new Action(aStarMovable(movable.x, movable.y, resource.floorLocation.x, resource.floorLocation.y, movable)),
                 new Action([new AtomicAction(PICKUP_ACTION, [resource, movable])]),
                 new Action(aStarMovable(resource.floorLocation.x, resource.floorLocation.y, villagerTask.source.entranceX, villagerTask.source.entranceY, movable)),
-                new Action([new AtomicAction(DROPOFF_ACTION, [movable, villagerTask.source, resource, true])]),
+                new Action([new AtomicAction(DROPOFF_ACTION, [movable, villagerTask.source, resource.resourceId, true])]),
             ];
+            movable.quest = questStuff;
             //#endregion
         }
         else if (villagerTask instanceof BuildRequest) {
@@ -579,24 +581,35 @@ self.onmessage = e => {
     tc.worldObjectsMap = new Uint32Array(worldObjectsMapSab);
     // create a dummy piece of wood for testing
     tc.resources.add(2, 3, 0);
-    tc.resources.add(0, 10, 10);
-    tc.resources.add(0, 10, 12);
-    tc.resources.add(0, 11, 0);
-    tc.resources.add(0, 12, 1);
-    tc.resources.add(0, 13, 2);
-    tc.resources.add(0, 15, 2);
-    tc.resources.add(0, 8, 0);
-    tc.resources.add(0, 9, 0);
+    tc.resources.add(2, 10, 10);
+    tc.resources.add(2, 10, 12);
+    tc.resources.add(2, 11, 0);
+    tc.resources.add(2, 12, 1);
+    tc.resources.add(2, 13, 2);
+    tc.resources.add(2, 15, 2);
+    tc.resources.add(2, 8, 0);
+    tc.resources.add(2, 9, 0);
     tc.resources.add(1, 3, 4);
     tc.resources.add(1, 2, 5);
     tc.resources.add(1, 1, 6);
     tc.resources.add(1, 3, 10);
-    tc.resources.add(1, 4, 11);
-    tc.resources.add(1, 5, 12);
-    tc.resources.add(0, 7, 0);
+    // tc.resources.add(1, 4, 11);
+    // tc.resources.add(1, 5, 12);
+    tc.resources.add(2, 7, 0);
     tc.dispensers.add(new Dispenser(15, 10, 0, 1));
-    tc.dispensers.add(new Dispenser(16, 11, 0, 15));
-    // tc.dispensers.add(new Dispenser(16, 11, 1, 5));
+    tc.dispensers.add(new Dispenser(16, 11, 0, 1));
+    tc.dispensers.add(new Dispenser(15, 12, 0, 1));
+    tc.dispensers.add(new Dispenser(16, 13, 0, 1));
+    tc.dispensers.add(new Dispenser(17, 13, 0, 1));
+    tc.dispensers.add(new Dispenser(17, 14, 0, 1));
+    tc.dispensers.add(new Dispenser(18, 10, 0, 1));
+    tc.dispensers.add(new Dispenser(18, 11, 0, 1));
+    tc.dispensers.add(new Dispenser(18, 12, 0, 1));
+    tc.dispensers.add(new Dispenser(18, 14, 0, 1));
+    tc.dispensers.add(new Dispenser(19, 13, 0, 1));
+    tc.dispensers.add(new Dispenser(19, 14, 0, 1));
+    tc.dispensers.add(new Dispenser(2, 11, 1, 15));
+    tc.dispensers.add(new Dispenser(1, 12, 1, 15));
     // let dummyVillager = new Movable([5,3,5,2,4,2,3,2,2,2,2,1]);
     // let dummyVillager2 = new Movable([10,1,9,1,8,1]);
     // let tc.movables = [dummyVillager2, dummyVillager];

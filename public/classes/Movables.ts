@@ -1,5 +1,5 @@
 import { tc } from '../tickContext.js';
-import { ResourceRequest, BuildRequest, FabricationRequest } from './Requests.js';
+import { ResourceRequest, BuildRequest, FabricationRequest, DispenserFetchRequest } from './Requests.js';
 
 class Movables {
 	knownMovables = [];
@@ -43,7 +43,7 @@ class Movable {
 
 	#quest = [];
 	indexOfCurrentQuestAction = 0;
-	heldResource = 0;
+	heldResource = null;
 
 	x;
 	y;
@@ -100,7 +100,7 @@ class Movable {
 		}
 
 		// the fabrication request needs to force end itself, it doesn't naturally end upon doing actionable steps because there's a timer gap
-		if (this.isFinishedWithQuest && !(this.task instanceof FabricationRequest)) {
+		if (this.isFinishedWithQuest && !(this.task instanceof FabricationRequest) && !(this.task instanceof DispenserFetchRequest)) {
 			this.task?.cancel();
 		}
 	}

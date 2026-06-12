@@ -150,6 +150,16 @@ self.onmessage = async (e) => {
                 ctx.drawImage(imgBitmap, treeTopLeftCornerX, treeTopLeftCornerY, hexWidthHalf * 3, HEX_RADIUS * 3);
                 // ctx.drawImage(imgBitmap, 10, 10, hexWidthHalf, 20);
             }
+            else if (Atomics.load(worldObjectsMap, gridIdx) == 1) {
+                const [centerPixelX, centerPixelY] = helpers.getPixelCenterFromCell(currentCellXY.x, currentCellXY.y, HEX_RADIUS);
+                ctx.beginPath();
+                const x = centerPixelX - leftLimit - HEX_RADIUS;
+                const y = centerPixelY - topLimit - HEX_RADIUS;
+                ctx.rect(x, y, HEX_RADIUS * 2, HEX_RADIUS * 2);
+                ctx.fillStyle = `#212121`;
+                ctx.fill();
+                // ctx.drawImage(imgBitmap, 10, 10, hexWidthHalf, 20);
+            }
         }
         //#endregion
         //#region - draw movables

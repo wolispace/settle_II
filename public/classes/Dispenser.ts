@@ -68,6 +68,14 @@ class Dispenser {
 		return this.taskReservedFor == undefined;
 	}
 
+	reduce() {
+		this.qty--
+		if (this.qty <= 0) {
+			Atomics.store(tc.worldObjectsMap, helpers.get1DCoordinateFromXYCoordinate(this.x, this.y, MAP_WIDTH), 0xFFFFFFFF);
+			tc.dispensers.remove(this);
+		}
+	}
+
 	getDistanceTo(x, y) {
 		return tc.getHeuristicCost(x, y, this.x, this.y)
 	}
