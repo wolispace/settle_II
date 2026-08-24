@@ -6,7 +6,10 @@ class ResourceStacks {
         this.knownResourceStacks = [];
     }
     // assuming always adding 1
-    add(resourceId, x, y, source = null) {
+    addResource(resourceId, x, y, source = null) {
+        return this.addStack(resourceId, x, y).add(source);
+    }
+    addStack(resourceId, x, y) {
         // loop over existing resourcestacks
         let foundStack = null;
         // check if the location matches the one we're looking for
@@ -31,7 +34,7 @@ class ResourceStacks {
             console.error(err);
             throw new Error(err);
         }
-        return foundStack.add(source);
+        return foundStack;
     }
     // remove(resourceToremove) {
     // 	for (let i = 0; i < this.knownResourceStacks.length; i++) {
@@ -94,6 +97,7 @@ class ResourceStack {
     constructor(resourceStacks, resourceId, x, y) {
         this.resources = [];
         this.newResourceID = 0;
+        this.owner = null;
         this.resourceStacks = resourceStacks;
         this.resourceId = resourceId;
         this.setLocation(x, y);
@@ -121,7 +125,7 @@ class ResourceStack {
             if (this.resources[i].resourceID == resource.resourceID) {
                 this.resources.splice(i, 1);
                 this.syncVisualState();
-                if (this.resources.length == 0) {
+                if (this.resources.length == 0 && this.owner == null) {
                     tc.resourceStacks.obliterateStack(this);
                 }
                 return true;

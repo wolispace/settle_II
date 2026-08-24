@@ -29,7 +29,8 @@ class Building {
     constructor(buildingIndex, x, y, id) {
         _Building_remainingBuildSteps.set(this, void 0);
         this.heldResources = {};
-        this.outfeedResources = {};
+        // outfeedResources = {};
+        this.outfeedStacks = {};
         this.associatedTasks = [];
         this.buildingIndex = buildingIndex;
         this.x = x;
@@ -75,6 +76,11 @@ class Building {
             this.associatedTasks.push(potentialTask);
         }
     }
+    createOutfeedStack(resourceId) {
+        let [x, y] = this.getOutfeedXY(resourceId);
+        this.outfeedStacks[resourceId] = tc.resourceStacks.addStack(resourceId, x, y);
+        this.outfeedStacks[resourceId].owner = this;
+    }
     updateBuildAmount(newBuildSteps) {
         __classPrivateFieldSet(this, _Building_remainingBuildSteps, newBuildSteps, "f");
         const bbox = buildingTypes[this.buildingIndex].bbox;
@@ -87,6 +93,17 @@ class Building {
             // clear the resources so that it's got a fresh slate upon being built
             // this.heldResources = {};
             this.removeFromHeldResources(buildingTypes[this.buildingIndex].constructionResources);
+            for (let i = 0; i < buildingTypes[this.buildingIndex].fabrications.length; i++) {
+                const outputVal = buildingTypes[this.buildingIndex].fabrications[i].output;
+                if (typeof outputVal === 'object') {
+                    for (const [resourceId, resourceQty] of Object.entries(outputVal)) {
+                        this.createOutfeedStack(resourceId);
+                    }
+                }
+                else {
+                    this.createOutfeedStack(outputVal);
+                }
+            }
             if (buildingTypes[this.buildingIndex].fabrications[0].input == null) {
                 this.addAssociatedTask(tc.availableTasks.add(new DispenserFetchRequest(this, buildingTypes[this.buildingIndex].fabrications[0].output), 2));
             }
@@ -117,7 +134,7 @@ class Building {
     hasOutputFeedSpace(resourceSet) {
         for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
             // we early exit if both the output stack exists, and also it doesn't have enough space
-            if (this.outfeedResources.hasOwnProperty(resourceId) && resourceQty + this.outfeedResources[resourceId].qty > MAX_RESOURCES_PER_STACK) {
+            if (this.outfeedStacks.hasOwnProperty(resourceId) && resourceQty + this.outfeedStacks[resourceId].qty > MAX_RESOURCES_PER_STACK) {
                 return false;
             }
         }
@@ -156,18 +173,22 @@ class Building {
     addToOutfeedResources(resourceId) {
         //#region add it to the outfeed
         let [x, y] = this.getOutfeedXY(resourceId);
-        if (!this.outfeedResources.hasOwnProperty(resourceId)) {
-            this.outfeedResources[resourceId] = tc.resourceStacks.add(resourceId, x, y, this).resourceStack;
+        if (!this.outfeedStacks.hasOwnProperty(resourceId)) {
+            // this scenario should never actually happen because all of the stacks should be created upon being built
+            this.createOutfeedStack(resourceId);
+            // create a new resource, and then assign the stack of the resource to the outfeedStacks
+            // this.outfeedStacks[resourceId] = tc.resourceStacks.addResource(resourceId, x, y, this).resourceStack;
+            // this.outfeedStacks[resourceId].owner = this;
         }
-        else {
-            const foundResourceStack = tc.resourceStacks.findResourceStackAt(x, y, resourceId);
-            if (!foundResourceStack) {
-                tc.resourceStacks.add(resourceId, x, y, this);
-            }
-            else {
-                foundResourceStack.add();
-            }
-        }
+        // const foundResourceStack = tc.resourceStacks.findResourceStackAt(x, y, resourceId);
+        // if (!foundResourceStack) {
+        // 	const err = `There shouldn't be a second outfeed stack at this location, the first one should linger around because it has an owner`
+        // 	console.error(err);
+        // 	throw new Error(err);
+        // 	// tc.resourceStacks.addResource(resourceId, x, y, this);
+        // } else {
+        this.outfeedStacks[resourceId].add(this);
+        // }
         //#endregion
         // Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x,y, MAP_WIDTH), helpers.resourceToUint32({
         // 	qty: this.outfeedResources[resourceId].qty,
@@ -224,20 +245,35 @@ class Building {
             }
         }
     }
-    // removeFromOutfeedResources(resourceSet: Record<number, number>) {
-    // 	for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
-    // 		// this.outfeedResources[resourceId] -= resourceQty;
-    // 		let outfeedXY = this.getOutfeedXY(resourceId);
-    // 		// if (this.outfeedResources[resourceId].qty == 0) {
-    // 		// 	Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), 0xFFFFFFFF);
-    // 		// } else {
-    // 			// Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), helpers.resourceToUint32({
-    // 			// 	qty: this.outfeedResources[resourceId].qty,
-    // 			// 	resourceId: resourceId
-    // 			// }));
-    // 		// }
-    // 	}
-    // }
+    removeFromOutfeedResources(resourceSet) {
+        for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
+            this.heldResources[resourceId] -= resourceQty;
+            let outfeedXY = this.getOutfeedXY(resourceId);
+            if (this.heldResources[resourceId] == 0) {
+                Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), 0xFFFFFFFF);
+            }
+            else {
+                // console.log("!!!!");
+                // console.log('!!!', this.heldResources);
+                Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), helpers.resourceToUint32({
+                    qty: this.heldResources[resourceId],
+                    resourceId: resourceId
+                }));
+            }
+        }
+        // for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
+        // 	// this.outfeedResources[resourceId] -= resourceQty;
+        // 	let outfeedXY = this.getOutfeedXY(resourceId);
+        // 	// if (this.outfeedResources[resourceId].qty == 0) {
+        // 	// 	Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), 0xFFFFFFFF);
+        // 	// } else {
+        // 		// Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), helpers.resourceToUint32({
+        // 		// 	qty: this.outfeedResources[resourceId].qty,
+        // 		// 	resourceId: resourceId
+        // 		// }));
+        // 	// }
+        // }
+    }
     cancelTask(task) {
         for (let j = 0; j < this.associatedTasks.length; j++) {
             if (this.associatedTasks[j].id == task.id) {
@@ -257,7 +293,7 @@ class Building {
         // this.outfeedResources[resource.resourceStack.resourceId]--;
         const objToBeRemoved = {};
         objToBeRemoved[resource.resourceStack.resourceId] = 1;
-        this.removeFromHeldResources(objToBeRemoved);
+        this.removeFromOutfeedResources(objToBeRemoved);
         this.makeOperationRequestIfPossible();
     }
 }
