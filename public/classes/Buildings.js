@@ -48,7 +48,13 @@ class Building {
     get entranceY() {
         return this.y + buildingTypes[this.buildingIndex].entrance[1];
     }
+    getInfeedXY(resourceId) {
+        // ideally in the future we would check if the inputLocations has that resourceId as a key, but can't be bothered right now
+        let relativePositionArray = buildingTypes[this.buildingIndex].inputLocations[resourceId];
+        return [this.x + relativePositionArray[0], this.y + relativePositionArray[1]];
+    }
     getOutfeedXY(resourceId) {
+        // ideally in the future we would check if the outputLocations has that resourceId as a key, but can't be bothered right now
         let relativePositionArray = buildingTypes[this.buildingIndex].outputLocations[resourceId];
         return [this.x + relativePositionArray[0], this.y + relativePositionArray[1]];
     }
@@ -79,7 +85,8 @@ class Building {
         if (__classPrivateFieldGet(this, _Building_remainingBuildSteps, "f") == 0) {
             this.cancelAllTasks();
             // clear the resources so that it's got a fresh slate upon being built
-            this.heldResources = {};
+            // this.heldResources = {};
+            this.removeFromHeldResources(buildingTypes[this.buildingIndex].constructionResources);
             if (buildingTypes[this.buildingIndex].fabrications[0].input == null) {
                 this.addAssociatedTask(tc.availableTasks.add(new DispenserFetchRequest(this, buildingTypes[this.buildingIndex].fabrications[0].output), 2));
             }
@@ -88,7 +95,9 @@ class Building {
                 // there might be several buildings with coal as input, and we don't want to request coal multiple times in those cases
                 // and it saves us from having to do static/constant calculations upon each building being built 
                 buildingTypes[this.buildingIndex].resourcesInDemand.forEach((resourceId) => {
-                    this.addAssociatedTask(tc.availableTasks.add(new ResourceRequest(this, resourceId), 2));
+                    for (let i = 0; i < MAX_RESOURCES_PER_STACK; i++) {
+                        this.addAssociatedTask(tc.availableTasks.add(new ResourceRequest(this, resourceId), 2));
+                    }
                 });
             }
         }
@@ -108,7 +117,7 @@ class Building {
     hasOutputFeedSpace(resourceSet) {
         for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
             // we early exit if both the output stack exists, and also it doesn't have enough space
-            if (this.outfeedResources.hasOwnProperty(resourceId) && resourceQty + this.outfeedResources[resourceId] > MAX_RESOURCES_PER_STACK) {
+            if (this.outfeedResources.hasOwnProperty(resourceId) && resourceQty + this.outfeedResources[resourceId].qty > MAX_RESOURCES_PER_STACK) {
                 return false;
             }
         }
@@ -121,6 +130,11 @@ class Building {
         else {
             this.heldResources[resourceId] += 1;
         }
+        let infeedXY = this.getInfeedXY(resourceId);
+        Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(infeedXY[0], infeedXY[1], MAP_WIDTH), helpers.resourceToUint32({
+            qty: this.heldResources[resourceId],
+            resourceId: resourceId
+        }));
         console.log(resourceId);
         // if the building is not built
         if (__classPrivateFieldGet(this, _Building_remainingBuildSteps, "f") > 0) {
@@ -134,53 +148,116 @@ class Building {
         else {
             // if the building is built
             this.makeOperationRequestIfPossible();
+            // if (this.heldResources[resourceId] < 8) {
+            // 	this.addAssociatedTask(tc.availableTasks.add(new DispenserFetchRequest(this, buildingTypes[this.buildingIndex].fabrications[0].output), 2));
+            // }
         }
     }
     addToOutfeedResources(resourceId) {
+        //#region add it to the outfeed
+        let [x, y] = this.getOutfeedXY(resourceId);
         if (!this.outfeedResources.hasOwnProperty(resourceId)) {
-            let [x, y] = this.getOutfeedXY(resourceId);
-            tc.resources.add(resourceId, x, y, this);
-            this.outfeedResources[resourceId] = 1;
+            this.outfeedResources[resourceId] = tc.resourceStacks.add(resourceId, x, y, this).resourceStack;
         }
         else {
-            if (this.outfeedResources[resourceId] == 0) {
-                let [x, y] = this.getOutfeedXY(resourceId);
-                tc.resources.add(resourceId, x, y, this);
+            const foundResourceStack = tc.resourceStacks.findResourceStackAt(x, y, resourceId);
+            if (!foundResourceStack) {
+                tc.resourceStacks.add(resourceId, x, y, this);
             }
             else {
-                let err = `find the resource which is at that location, and increment the qty in its stack`;
-                console.error(err);
-                throw new Error(err);
+                foundResourceStack.add();
             }
-            this.outfeedResources[resourceId]++;
         }
+        //#endregion
+        // Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x,y, MAP_WIDTH), helpers.resourceToUint32({
+        // 	qty: this.outfeedResources[resourceId].qty,
+        // 	resourceId: resourceId
+        // }));
+        //#region make new dispense fetch request if appropriate
+        // do we have space at the ouput?
+        // if (this.outfeedResources[resourceId] < MAX_RESOURCES_PER_STACK) {
+        // 	this.makeOperationRequestIfPossible();
+        // }
+        //#endregion
     }
+    // do whatever you do as a building
     makeOperationRequestIfPossible() {
-        buildingTypes[this.buildingIndex].fabrications.forEach((fabrication) => {
+        // only one operation request can be active at a time, so quit if one is already existing 
+        for (let i = 0; i < this.associatedTasks.length; i++) {
+            if (this.associatedTasks[i] instanceof DispenserFetchRequest ||
+                this.associatedTasks[i] instanceof FabricationRequest) {
+                return null;
+            }
+        }
+        for (let i = 0; i < buildingTypes[this.buildingIndex].fabrications.length; i++) {
+            const fabrication = buildingTypes[this.buildingIndex].fabrications[i];
             if (fabrication.input == null) {
-                this.addAssociatedTask(tc.availableTasks.add(new DispenserFetchRequest(this, fabrication.output), 2));
+                const fabricationOutputObj = {};
+                fabricationOutputObj[fabrication.output] = 1;
+                if (this.hasOutputFeedSpace(fabricationOutputObj)) {
+                    this.addAssociatedTask(tc.availableTasks.add(new DispenserFetchRequest(this, fabrication.output), 2));
+                    // we can only have one operation request at a time, and we've just added one so get outta here
+                    return;
+                }
             }
             else if (this.hasResources(fabrication.input) && this.hasOutputFeedSpace(fabrication.output)) {
                 this.addAssociatedTask(tc.availableTasks.add(new FabricationRequest(this, fabrication), 2));
+                // we can only have one operation request at a time, and we've just added one so get outta here
+                return;
             }
-        });
+        }
     }
     removeFromHeldResources(resourceSet) {
         for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
             this.heldResources[resourceId] -= resourceQty;
+            let infeedXY = this.getInfeedXY(resourceId);
+            if (this.heldResources[resourceId] == 0) {
+                Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(infeedXY[0], infeedXY[1], MAP_WIDTH), 0xFFFFFFFF);
+            }
+            else {
+                // console.log("!!!!");
+                // console.log('!!!', this.heldResources);
+                Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(infeedXY[0], infeedXY[1], MAP_WIDTH), helpers.resourceToUint32({
+                    qty: this.heldResources[resourceId],
+                    resourceId: resourceId
+                }));
+            }
         }
     }
+    // removeFromOutfeedResources(resourceSet: Record<number, number>) {
+    // 	for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
+    // 		// this.outfeedResources[resourceId] -= resourceQty;
+    // 		let outfeedXY = this.getOutfeedXY(resourceId);
+    // 		// if (this.outfeedResources[resourceId].qty == 0) {
+    // 		// 	Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), 0xFFFFFFFF);
+    // 		// } else {
+    // 			// Atomics.store(tc.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(outfeedXY[0], outfeedXY[1], MAP_WIDTH), helpers.resourceToUint32({
+    // 			// 	qty: this.outfeedResources[resourceId].qty,
+    // 			// 	resourceId: resourceId
+    // 			// }));
+    // 		// }
+    // 	}
+    // }
     cancelTask(task) {
         for (let j = 0; j < this.associatedTasks.length; j++) {
             if (this.associatedTasks[j].id == task.id) {
-                return this.associatedTasks.splice(j, 1)[0];
+                this.associatedTasks.splice(j, 1)[0];
+                break;
             }
+        }
+        // if you've finished doing one of the operation requests for the building, queue up another one
+        if (task instanceof DispenserFetchRequest ||
+            task instanceof FabricationRequest) {
+            this.makeOperationRequestIfPossible();
         }
     }
     resourceRemoved(resource) {
         // it doesn't matter which one you remove, because they all should have this building as its source
         // and they all should be at the same location, so they're equivalent
-        this.outfeedResources[resource.resourceId]--;
+        // this.outfeedResources[resource.resourceStack.resourceId]--;
+        const objToBeRemoved = {};
+        objToBeRemoved[resource.resourceStack.resourceId] = 1;
+        this.removeFromHeldResources(objToBeRemoved);
         this.makeOperationRequestIfPossible();
     }
 }

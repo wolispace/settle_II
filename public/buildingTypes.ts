@@ -26,6 +26,10 @@ export const buildingTypes = [
 		outputLocations: {
 			0: [1, 1]
 		},
+		inputLocations: {
+			1: [-1, 1],
+			2: [-2, 1]
+		},
 		resourcesInDemand: []
     },
     {
@@ -55,6 +59,11 @@ export const buildingTypes = [
 		outputLocations: {
 			2: [1, 1]
 		},
+		inputLocations: {
+			1: [-1, 1],
+			2: [-2, 1],
+			0: [-1, 1]
+		},
 		resourcesInDemand: [0]
     },
     {
@@ -67,8 +76,8 @@ export const buildingTypes = [
 		bbox: [[-1, -2], [1, -2], [-1, 0], [1,0]],
 		entrance: [0, 1],
 		constructionResources: {
-			2: 1,
-			1: 1
+			2: 2,
+			1: 2
 		},
 		buildSteps: 3,
 		maxBuilders: 10,
@@ -79,6 +88,10 @@ export const buildingTypes = [
 		}],
 		outputLocations: {
 			1: [1, 1]
+		},
+		inputLocations: {
+			1: [-1, 1],
+			2: [-2, 1]
 		},
 		resourcesInDemand: []
     }

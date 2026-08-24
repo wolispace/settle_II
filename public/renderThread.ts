@@ -154,15 +154,19 @@ self.onmessage = async (e) => {
 			const currentResourceCell = Atomics.load(drawableResourcesMapMask, gridIdx);
 			if (currentResourceCell != 0xFFFFFFFF) {
 				const [resourceId, resourceQty] = helpers.uint32ToResource(currentResourceCell);
-				if (resourceId == 0) {
-					ctx.fillStyle = `#785d31`;
-					ctx.fill();
-				} else if (resourceId == 1) {
-					ctx.fillStyle = `#777777`;
-					ctx.fill();
-				} else if (resourceId == 2) {
-					ctx.fillStyle = `#e8e0bc`;
-					ctx.fill();
+				if (resourceQty!= 0) {
+					if (resourceId == 0) {
+						ctx.fillStyle = `#785d31`;
+						ctx.fill();
+					} else if (resourceId == 1) {
+						ctx.fillStyle = `#777777`;
+						ctx.fill();
+					} else if (resourceId == 2) {
+						ctx.fillStyle = `#e8e0bc`;
+						ctx.fill();
+					}
+					ctx.fillStyle = `#ffffff`;
+					ctx.fillText(resourceQty, centerPixelX-3, centerPixelY+3);
 				}
 			}
             

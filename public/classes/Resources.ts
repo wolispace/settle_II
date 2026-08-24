@@ -1,67 +1,207 @@
 import helpers from '../helpers.js';
 import { tc } from '../tickContext.js';
 import {
+	MAX_RESOURCES_PER_STACK,
 	MAP_WIDTH,
 } from '../constants.js';
 
-class Resources {
-	knownResources = [];
+class ResourceStacks {
+	knownResourceStacks:Array<any> = [];
 	drawableResourcesMapMask;
+
 
 	constructor() { }
 
+	// assuming always adding 1
 	add(resourceId, x, y, source = null) {
-		let newResource = new Resource(this, resourceId, x, y, source)
-		this.knownResources.push(newResource)
+
+		// loop over existing resourcestacks
+		let foundStack:any = null;
+		// check if the location matches the one we're looking for
+		for (let i = 0; i < this.knownResourceStacks.length; i++) {
+			if (this.knownResourceStacks[i].floorLocation.x == x && this.knownResourceStacks[i].floorLocation.y == y) {
+				foundStack = this.knownResourceStacks[i];
+				break;
+			}
+		}
+		if (foundStack == null) {
+			// if no stack exists at the location we're looking for then create it
+			foundStack = new ResourceStack(this, resourceId, x, y)
+			this.knownResourceStacks.push(foundStack);
+		} else if (foundStack.resourceId != resourceId) {
+			const err = `Trying to add to a stack of a different type (e.g. wood to a stone stack), this should never happen`;
+			console.error(err);
+			throw new Error(err)
+		} else if (foundStack.qty >= MAX_RESOURCES_PER_STACK) {
+			const err = `Trying to add more to a stack than it can handle... this may happen so maybe shouldn't be throwing an error like this, but can't think about what that would look like right now`;
+			console.error(err);
+			throw new Error(err)
+		} 
+		
+		return foundStack.add(source);
+	}
+
+	// remove(resourceToremove) {
+	// 	for (let i = 0; i < this.knownResourceStacks.length; i++) {
+	// 		if (this.knownResourceStacks[i].floorLocation.x == resourceToremove.floorLocation.x
+	// 			&& this.knownResourceStacks[i].floorLocation.y == resourceToremove.floorLocation.y) {
+	// 			this.knownResourceStacks.splice(i, 1);
+	// 			return true;
+	// 		}
+	// 	}
+	// 	return false;
+	// }
+
+	findClosestIdleTo(x, y, resourceId) {
+		let closesDistance = tc.furthestDiagonalDistance;
+		let foundResource = null;
+		for (let i = 0; i < this.knownResourceStacks.length; i++) {
+			if (this.knownResourceStacks[i].resourceId != resourceId) {
+				continue;
+			}
+			const tempFoundResource = this.knownResourceStacks[i].getAvailableResource();
+			if (tempFoundResource == null) {
+				continue;
+			}
+			const currentDistance = this.knownResourceStacks[i].getDistanceTo(x, y);
+			if (currentDistance < closesDistance) {
+				foundResource = tempFoundResource;
+				closesDistance = currentDistance;
+			}
+		}
+		return foundResource;
+	}
+
+	findResourceStackAt(x, y, resourceId) {
+		for (let i = 0; i < this.knownResourceStacks.length; i++) {
+			const resourceStack = this.knownResourceStacks[i];
+			if (resourceStack.floorLocation.x == x 
+				&& resourceStack.floorLocation.y == y
+				&& resourceStack.resourceId == resourceId
+			) {
+				return resourceStack;
+			}
+		}
+		return null;
+	}
+
+	obliterateStack(stack) {
+		for (let i = 0; i < this.knownResourceStacks.length; i++) {
+			if (this.knownResourceStacks[i].floorLocation.x == stack.floorLocation.x 
+			&& this.knownResourceStacks[i].floorLocation.y == stack.floorLocation.y) {
+				if (this.knownResourceStacks[i].floorLocation.resourceId != stack.floorLocation.resourceId) {
+					const err = `It shouldn't be possible to have two stacks taking up the same tile that have different resourceIds`;
+					console.error(err);
+					throw new Error(err);
+				}
+				this.knownResourceStacks.splice(i, 1);
+				return true;
+			}
+		}
+		return false;
+	};
+}
+
+class ResourceStack {
+	resourceStacks;
+	resources:Array<any> = [];
+	resourceId;
+	floorLocation;
+	newResourceID = 0;
+
+	constructor(resourceStacks, resourceId, x, y) {
+		this.resourceStacks = resourceStacks;
+		this.resourceId = resourceId;
+		this.setLocation(x, y)
+	}
+
+	get qty() {
+		return this.resources.length;
+	}
+
+	add(source = null) {
+		const newResource = new Resource(this, source)
+		this.resources.push(newResource);
+		this.newResourceID++;
+		this.syncVisualState()
 		return newResource;
 	}
 
-	remove(resourceToremove) {
-		console.log(resourceToremove);
-		for (let i = 0; i < this.knownResources.length; i++) {
-			if (this.knownResources[i].floorLocation.x == resourceToremove.floorLocation.x
-				&& this.knownResources[i].floorLocation.y == resourceToremove.floorLocation.y) {
-				this.knownResources.splice(i, 1);
+	setLocation(x, y) {
+		// Atomics.store(this.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH), helpers.resourceToUint32(this));
+		this.floorLocation = { x, y };
+		this.syncVisualState()
+	}
+
+
+	getDistanceTo(x, y) {
+		return tc.getHeuristicCost(x, y, this.floorLocation.x, this.floorLocation.y)
+	}
+
+	removeFromStack(resource) {
+		for (let i = 0; i < this.resources.length; i++) {
+			if (this.resources[i].resourceID == resource.resourceID) {
+				this.resources.splice(i, 1);
+				this.syncVisualState()
+				if (this.resources.length == 0) {
+					tc.resourceStacks.obliterateStack(this);
+				}
 				return true;
 			}
 		}
 		return false;
 	}
 
-	findClosestTo(x, y, resourceId) {
-		let closesDistance = tc.furthestDiagonalDistance;
-		let foundResource = null;
-		for (let i = 0; i < this.knownResources.length; i++) {
-			if (this.knownResources[i].resourceId != resourceId) {
-				continue;
-			}
-			if (!this.knownResources[i].isAvailable) {
-				continue;
-			}
-			const currentDistance = this.knownResources[i].getDistanceTo(x, y);
-			if (currentDistance < closesDistance) {
-				foundResource = this.knownResources[i];
-				closesDistance = currentDistance;
+	getAvailableResource() {
+		for (let i = 0; i < this.resources.length; i++) {
+			if (!this.resources[i].reservedForAction) {
+				return this.resources[i];
 			}
 		}
-		return foundResource;
+		return null;
 	}
+
+	hasUnreservedResources() {
+		for (let i = 0; i < this.resources.length; i++) {
+			if (this.resources[i].isAvailable) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	syncVisualState() {
+		Atomics.store(this.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), helpers.resourceToUint32({
+			qty: this.resources.length,
+			resourceId: this.resourceId
+		}));
+	}
+
+	
+
+	// decrementStack() {
+	// 	this.qty--;
+	// 	if (this.source) {
+	// 		this.source.resourceRemoved(this);
+	// 		this.source = null;
+	// 	}
+	// 	if (this.qty == 0) {
+	// 		this.resourceStacks.remove(this);
+	// 		Atomics.store(this.resourceStacks.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0xFFFFFFFF);
+	// 	}
+	// }
 }
 
 class Resource {
-	resources;
-	resourceId;
-	qty = 1;
-	// #carriedBy = null;
-	floorLocation;
 	// e.g if a settler is walking to a piece of wood, nobody else can access it
 	reservedForAction = false;
 	source;
+	resourceStack;
+	// resourceId;
 
-	constructor(resources, resourceId, x, y, source = null) {
-		this.resources = resources;
-		this.resourceId = resourceId;
-		this.setLocation(x, y)
+	constructor(resourceStack, source) {
+		this.resourceStack = resourceStack;
+		// this.resourceId = resourceID;
 		this.source = source;
 
 		tc.doTaskMatchmake(tc.taskQueue.getTickInFuture(1));
@@ -71,37 +211,13 @@ class Resource {
 		return this.reservedForAction == false;
 	}
 
-	// set carriedBy(movable) {
-	// 	if (movable == null) {
-	// 		this.setLocation(this.#carriedBy.x, this.#carriedBy.y)
-	// 		this.#carriedBy = null;
-	// 	} else {
-	// 		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0);
-	// 		this.#carriedBy = movable;
-	// 	}
-	// }
-
-	setLocation(x, y) {
-		Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(x, y, MAP_WIDTH), helpers.resourceToUint32(this));
-		this.floorLocation = { x, y };
-	}
-
-
-	getDistanceTo(x, y) {
-		return tc.getHeuristicCost(x, y, this.floorLocation.x, this.floorLocation.y)
-	}
-
-	removeFromWorld() {
-		this.qty--;
+	remove() {
 		if (this.source) {
 			this.source.resourceRemoved(this);
 			this.source = null;
 		}
-		if (this.qty == 0) {
-			this.resources.remove(this);
-			Atomics.store(this.resources.drawableResourcesMapMask, helpers.get1DCoordinateFromXYCoordinate(this.floorLocation.x, this.floorLocation.y, MAP_WIDTH), 0xFFFFFFFF);
-		}
+		this.resourceStack.removeFromStack(this);
 	}
 }
 
-export { Resources, Resource };
+export { ResourceStacks, ResourceStack };

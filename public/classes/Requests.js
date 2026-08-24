@@ -11,8 +11,8 @@ class ResourceRequest {
     // assume this never gets called unless there are idle villagers, so you're checking for everything else
     get canBeDone() {
         // this will need to be updated when there are more than one type of resource
-        for (let i = 0; i < tc.resources.knownResources.length; i++) {
-            if (tc.resources.knownResources[i].resourceId == this.resourceId && tc.resources.knownResources[i].isAvailable) {
+        for (let i = 0; i < tc.resourceStacks.knownResourceStacks.length; i++) {
+            if (tc.resourceStacks.knownResourceStacks[i].hasUnreservedResources()) {
                 return true;
             }
         }
