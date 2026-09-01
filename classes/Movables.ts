@@ -4,7 +4,6 @@ import { ResourceRequest, BuildRequest, FabricationRequest, DispenserFetchReques
 class Movables {
 	knownMovables = [];
 	// idleMovables could exist here
-	nextID = 0;
 
 	constructor() {
 
@@ -19,15 +18,9 @@ class Movables {
 		return false;
 	}
 
-	add(x,y) {
-		let newMovable = new Movable(x, y, this.nextID);
-		this.nextID++;
-		this.knownMovables.push(newMovable);
+	add(movable) {
+		this.knownMovables.push(movable);
 	}
-
-	// add(movable) {
-	// 	this.knownMovables.push(movable);
-	// }
 
 	findClosestIdleTo(x, y) {
 		let closesDistance = tc.furthestDiagonalDistance;

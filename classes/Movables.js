@@ -13,10 +13,9 @@ var _Movable_quest;
 import { tc } from '../tickContext.js';
 import { FabricationRequest, DispenserFetchRequest } from './Requests.js';
 class Movables {
+    // idleMovables could exist here
     constructor() {
         this.knownMovables = [];
-        // idleMovables could exist here
-        this.nextID = 0;
     }
     get hasIdle() {
         for (let i = 0; i < this.knownMovables.length; i++) {
@@ -26,14 +25,9 @@ class Movables {
         }
         return false;
     }
-    add(x, y) {
-        let newMovable = new Movable(x, y, this.nextID);
-        this.nextID++;
-        this.knownMovables.push(newMovable);
+    add(movable) {
+        this.knownMovables.push(movable);
     }
-    // add(movable) {
-    // 	this.knownMovables.push(movable);
-    // }
     findClosestIdleTo(x, y) {
         let closesDistance = tc.furthestDiagonalDistance;
         let foundIdle = null;

@@ -15,7 +15,6 @@ import { tc } from '../tickContext.js';
 import { ResourceRequest, BuildRequest, FabricationRequest, DispenserFetchRequest } from './Requests.js';
 import helpers from '../helpers.js';
 import { MAP_WIDTH, MAX_RESOURCES_PER_STACK } from '../defs/constants.js';
-import { Task } from './Task.js';
 class Buildings {
     constructor() {
         this.knownBuildings = [];
@@ -135,15 +134,10 @@ class Building {
                 }
             }
             else if (buildingTypes[this.buildingIndex].fabrications[0].output.type == 'movable') {
-                console.log(`New house built, make a movable or something`);
-                tc.taskQueue.addTask(tc.taskQueue.getTickInFuture(1), new Task((i) => {
-                    for (let i = 0; i < buildingTypes[this.buildingIndex].fabrications[0].output.qty; i++) {
-                        tc.movables.add(this.entranceX, this.entranceY);
-                    }
-                }));
+                alert(`New house built, make a movable or something`);
             }
             else {
-                const err = `Unfamiliar with output type for fabrication of ${buildingTypes[this.buildingIndex].fabrications[0].output.type}`;
+                const err = `Unfamiliar with output type for fabrication of ${buildingTypes[this.buildingIndex].fabrications[i].output.type}`;
                 console.error(err);
                 throw new Error(err);
             }
@@ -252,33 +246,34 @@ class Building {
                         // we can only have one operation request at a time, and we've just added one so get outta here
                         return;
                     }
+                    if (fabrication.output.type == 'movable') {
+                        // this is where we put in the thing to create people
+                    }
+                    else {
+                        const err = `Unfamiliar with output type for fabrication of ${buildingTypes[this.buildingIndex].fabrications[i].output.type}`;
+                        console.error(err);
+                        throw new Error(err);
+                    }
                 }
-                else if (fabrication.output.type == 'movable') {
-                    // this is where we put in the thing to create people
-                }
-                else {
-                    const err = `Unfamiliar with output type for fabrication of ${buildingTypes[this.buildingIndex].fabrications[i].output.type}`;
-                    console.error(err);
-                    throw new Error(err);
-                }
-            }
-            else if (this.hasResources(fabrication.input) && this.hasOutputFeedSpace(fabrication.output.value)) {
-                if (fabrication.output.type == 'resource') {
-                    this.addAssociatedTask(tc.availableTasks.add(new FabricationRequest(this, fabrication), 2));
-                    // we can only have one operation request at a time, and we've just added one so get outta here
-                    return;
-                }
-                else {
-                    // you might have a case where the input is defined and the output is not a resource (e.g. a movable, when creating a boat) however you're not there yet so leaving that branch to be built
-                    const err = `why are you outputting something that isn't a resource when there was an input? feature not developed yet... perhaps a boat...`;
-                    console.error(err);
-                    throw new Error(err);
+                else if (this.hasResources(fabrication.input) && this.hasOutputFeedSpace(fabrication.output.value)) {
+                    if (fabrication.output.type == 'resource') {
+                        this.addAssociatedTask(tc.availableTasks.add(new FabricationRequest(this, fabrication), 2));
+                        // we can only have one operation request at a time, and we've just added one so get outta here
+                        return;
+                    }
+                    else {
+                        // you might have a case where the input is defined and the output is not a resource (e.g. a movable, when creating a boat) however you're not there yet so leaving that branch to be built
+                        const err = `why are you outputting something that isn't a resource when there was an input? feature not developed yet... perhaps a boat...`;
+                        console.error(err);
+                        throw new Error(err);
+                    }
                 }
             }
         }
-    }
-    removeFromHeldResources(resourceSet) {
-        for (const [resourceId, resourceQty] of Object.entries(resourceSet)) {
+        removeFromHeldResources(resourceSet, Record(), {
+            for(, [resourceId, resourceQty], of, Object) { }, : .entries(resourceSet)
+        });
+        {
             this.heldResources[resourceId] -= resourceQty;
             let infeedXY = this.getInfeedXY(resourceId);
             if (this.heldResources[resourceId] == 0) {

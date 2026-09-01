@@ -1,13 +1,11 @@
 import { buildingTypes } from '../defs/buildingTypes.js';
 import { tc } from '../tickContext.js';
 import { ResourceRequest, BuildRequest, FabricationRequest, DispenserFetchRequest } from './Requests.js';
-import { Movables, Movable } from './Movables.js';
 import helpers from '../helpers.js';
 import {
 	MAP_WIDTH,
 	MAX_RESOURCES_PER_STACK
 } from '../defs/constants.js';
-import { Task } from './Task.js';
 
 class Buildings {
 	knownBuildings: Array<Building> = [];
@@ -148,14 +146,9 @@ class Building {
 					})
 				}
 			} else if (buildingTypes[this.buildingIndex].fabrications[0].output.type == 'movable') {
-				console.log(`New house built, make a movable or something`)
-				tc.taskQueue.addTask(tc.taskQueue.getTickInFuture(1), new Task((i) => {
-					for (let i = 0; i < buildingTypes[this.buildingIndex].fabrications[0].output.qty; i++) {
-						tc.movables.add(this.entranceX, this.entranceY);
-					}
-				}))
+				alert(`New house built, make a movable or something`)
 			} else {
-				const err = `Unfamiliar with output type for fabrication of ${buildingTypes[this.buildingIndex].fabrications[0].output.type}`;
+				const err = `Unfamiliar with output type for fabrication of ${buildingTypes[this.buildingIndex].fabrications[i].output.type}`;
 				console.error(err);
 				throw new Error(err);
 			}
@@ -276,7 +269,7 @@ class Building {
 						// we can only have one operation request at a time, and we've just added one so get outta here
 						return;
 					}	
-				} else if (fabrication.output.type == 'movable') {
+				if (fabrication.output.type == 'movable') {
 					// this is where we put in the thing to create people
 				} else {
 					const err = `Unfamiliar with output type for fabrication of ${buildingTypes[this.buildingIndex].fabrications[i].output.type}`;

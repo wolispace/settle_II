@@ -1,0 +1,29 @@
+// playStateArray indexes
+// note that we've made an assumption that the final element is 1 unit large
+export const PLAYER_STATE_ARRAY_INDEXES = {
+    CAMERA_X_MIN: 0,
+    CAMERA_Y_MIN: 1,
+    CAMERA_X_MAX: 2,
+    CAMERA_Y_MAX: 3,
+    MOUSE_X: 4,
+    MOUSE_Y: 5,
+    SELECTED_BUILDING_TYPE: 6,
+    ZOOM: 7
+};
+// this should be an enum, would be faster to read?
+export const DIRECTIONS = {
+    'NORTH_EAST': [+1, -1],
+    'EAST': [+1, 0],
+    'SOUTH_EAST': [0, +1],
+    'SOUTH_WEST': [-1, +1],
+    'WEST': [-1, 0],
+    'NORTH_WEST': [0, -1]
+};
+export const HEX_RADIUS = 10;
+export const MAX_MOVABLES = 20000;
+export const NUM_EXTRA_BITS = 1; // at the moment we're just storing an extra bit for whether the movablePositions is currently locked or not
+export const MAX_SCHEDULE_DURATION_MS = 32000;
+export const TICK_PERIOD_MS = 250;
+export const MAP_WIDTH = 100;
+export const MAP_HEIGHT = 100;
+export const MAX_RESOURCES_PER_STACK = 7;

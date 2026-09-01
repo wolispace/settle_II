@@ -16,7 +16,6 @@ import { ResourceStacks, ResourceStack } from './classes/Resources.js';
 import { Movables, Movable } from './classes/Movables.js';
 import { Buildings, Building } from './classes/Buildings.js';
 import { Dispensers, Dispenser } from './classes/Dispenser.js';
-import { Task } from './classes/Task.js';
 
 import { tc } from './tickContext.js';
 
@@ -264,7 +263,21 @@ class TaskQueue {
 	}
 }
 
+class Task {
+	todo;
+	rescheduleDurationInTicks;
 
+	constructor(todo, rescheduleDurationInMs = null) {
+		this.todo = todo;
+		if (rescheduleDurationInMs == null) {
+			return;
+		}
+		if (rescheduleDurationInMs >= MAX_SCHEDULE_DURATION_MS) {
+			throw new Error(`Can't add a rescheduleDurationInMs (${rescheduleDurationInMs}) longer than ${MAX_SCHEDULE_DURATION_MS}`);
+		}
+		this.rescheduleDurationInTicks = rescheduleDurationInMs / TICK_PERIOD_MS;
+	}
+}
 
 class OpenBucketQueue {
 	// must be a power of 2
@@ -821,14 +834,14 @@ self.onmessage = e => {
 	tc.taskQueue.addTask(0, moveAllMovablesTask);
 
 
-	// let movableOne = new Movable(, 1);
-	tc.movables.add(0, 0)
+	let movableOne = new Movable(0, 0, 1);
+	tc.movables.add(movableOne)
 	// movableOne.quest = [new Action([
 	// 	new AtomicAction(MOVE_ACTION, [0,0, movableOne])
 	// ])]
 
-	// let movableTwo = new Movable(, 2);
-	tc.movables.add(7, 1)
+	let movableTwo = new Movable(7, 1, 2);
+	tc.movables.add(movableTwo)
 	// movableTwo.quest = [new Action([
 	// 	new AtomicAction(MOVE_ACTION, [7,1, movableTwo]),
 	// 	new AtomicAction(MOVE_ACTION, [6,1, movableTwo]),
@@ -839,8 +852,8 @@ self.onmessage = e => {
 	// 	new AtomicAction(MOVE_ACTION, [1,1, movableTwo])
 	// ])];
 
-	// let movableThree = new Movable(, 3);
-	tc.movables.add(7, 2)
+	let movableThree = new Movable(7, 2, 3);
+	tc.movables.add(movableThree)
 	// movableThree.quest = [new Action([
 	// 	new AtomicAction(MOVE_ACTION, [7,2, movableThree]),
 	// 	new AtomicAction(MOVE_ACTION, [6,2, movableThree]),
@@ -851,8 +864,8 @@ self.onmessage = e => {
 	// 	new AtomicAction(MOVE_ACTION, [1,2, movableThree])
 	// ])];
 
-	// let movableFour = new Movable(, 4);
-	tc.movables.add(10, 8)
+	let movableFour = new Movable(10, 8, 4);
+	tc.movables.add(movableFour)
 
 	//#region - add 20_000 people and have them wander randomly
 
